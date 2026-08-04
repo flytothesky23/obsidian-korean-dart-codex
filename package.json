@@ -1,0 +1,50 @@
+{
+  "name": "obsidian-korean-dart-codex",
+  "version": "0.1.0",
+  "description": "Research Korean public disclosures through Codex CLI and korean-dart-mcp, then save source-backed notes in Obsidian.",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "deploy:local": "npm run build && node scripts/deploy-local.mjs",
+    "release:check": "node scripts/verify-release.mjs",
+    "release:prepare": "npm test && npm run typecheck && npm run build && npm run release:check",
+    "smoke:dart:appserver": "node scripts/run-appserver-dart-streaming-smoke.mjs",
+    "smoke:mcp:appserver": "node scripts/run-appserver-mcp-status-smoke.mjs",
+    "smoke:mcp:contract": "node scripts/run-upstream-mcp-smoke.mjs --contract",
+    "smoke:mcp:live": "node scripts/run-upstream-mcp-smoke.mjs --live",
+    "smoke:models:appserver": "node scripts/run-appserver-model-catalog-smoke.mjs",
+    "smoke:visual:appserver": "node scripts/run-appserver-visual-smoke.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -noEmit -skipLibCheck"
+  },
+  "keywords": [
+    "obsidian",
+    "codex",
+    "mcp",
+    "korean-dart",
+    "opendart",
+    "corporate-disclosure",
+    "financial-research"
+  ],
+  "author": "flytothesky23",
+  "license": "MIT",
+  "homepage": "https://github.com/flytothesky23/obsidian-korean-dart-codex#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flytothesky23/obsidian-korean-dart-codex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/flytothesky23/obsidian-korean-dart-codex/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.12",
+    "happy-dom": "^20.11.1",
+    "obsidian": "^1.8.7",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
+  }
+}

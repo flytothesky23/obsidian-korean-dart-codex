@@ -1,0 +1,41 @@
+# Release Guide
+
+Korean DART Codex uses GitHub Releases as the BRAT distribution surface.
+
+Required release assets:
+
+- `main.js`
+- `manifest.json`
+- `styles.css`
+- `versions.json`
+
+## Prepare
+
+Update `package.json`, `package-lock.json`, `manifest.json`, `versions.json`, and
+`CHANGELOG.md` to the same semantic version, then run:
+
+```bash
+npm ci
+npm run release:prepare
+```
+
+## Publish
+
+Commit with the repository Lore commit protocol, create a tag matching the
+manifest version, and push both.
+
+```bash
+git tag v0.1.0
+git push origin main --tags
+```
+
+GitHub Actions rebuilds the bundle and publishes the four BRAT assets. Never
+include `DART_API_KEY`, Codex tokens, `.env`, or local vault data in a release.
+
+## BRAT smoke test
+
+1. Add `https://github.com/flytothesky23/obsidian-korean-dart-codex` in BRAT.
+2. Confirm BRAT downloads all four release assets.
+3. Enable `Korean DART Codex`.
+4. Open the panel and verify the MCP status badge.
+5. Run one source-backed DART question and save the result note.
