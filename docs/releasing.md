@@ -25,7 +25,7 @@ Commit with the repository Lore commit protocol, create a tag matching the
 manifest version, and push both.
 
 ```bash
-git tag v0.1.0
+git tag "v$(node -p 'require(\"./manifest.json\").version')"
 git push origin main --tags
 ```
 

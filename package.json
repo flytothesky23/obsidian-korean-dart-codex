@@ -1,6 +1,6 @@
 {
   "name": "obsidian-korean-dart-codex",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Research Korean public disclosures through Codex CLI and korean-dart-mcp, then save source-backed notes in Obsidian.",
   "main": "main.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "release:check": "node scripts/verify-release.mjs",
     "release:prepare": "npm test && npm run typecheck && npm run build && npm run release:check",
     "smoke:dart:appserver": "node scripts/run-appserver-dart-streaming-smoke.mjs",
-    "smoke:mcp:appserver": "node scripts/run-appserver-mcp-status-smoke.mjs",
+    "smoke:mcp:appserver": "node scripts/run-appserver-mcp-exposure-smoke.mjs",
+    "smoke:mcp:health": "node scripts/run-appserver-mcp-status-smoke.mjs",
     "smoke:mcp:contract": "node scripts/run-upstream-mcp-smoke.mjs --contract",
     "smoke:mcp:live": "node scripts/run-upstream-mcp-smoke.mjs --live",
     "smoke:models:appserver": "node scripts/run-appserver-model-catalog-smoke.mjs",

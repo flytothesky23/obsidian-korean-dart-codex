@@ -71,7 +71,7 @@ export async function discoverCodexModels(input: {
 
   try {
     await transport.request("initialize", {
-      clientInfo: { name: "korean-dart-codex-model-catalog", version: "0.1.0" },
+      clientInfo: { name: "korean-dart-codex-model-catalog", version: "0.1.1" },
       capabilities: { experimentalApi: true },
     }, input.timeoutMs);
     transport.notify("initialized");

@@ -44,7 +44,7 @@ describe("Korean DART MCP health", () => {
       serverInfo: { name: "korean-dart-mcp", version: "0.9.2" },
     }, {
       tools: [{ name: "search_disclosures" }, { name: "get_financials" }],
-    });
+    }, "managed");
 
     expect(status).toMatchObject({
       state: "ready",
@@ -52,6 +52,7 @@ describe("Korean DART MCP health", () => {
       version: "0.9.2",
       toolCount: 2,
       authStatus: "configured",
+      source: "managed",
       error: "",
     });
   });

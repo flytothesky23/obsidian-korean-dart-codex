@@ -192,7 +192,7 @@ export class CodexAppServerVisualProvider {
 
     try {
       await transport.request("initialize", {
-        clientInfo: { name: "korean-dart-codex", version: "0.1.0" },
+        clientInfo: { name: "korean-dart-codex", version: "0.1.1" },
         capabilities: { experimentalApi: true },
       }, input.appServerTimeoutMs);
       transport.notify("initialized");

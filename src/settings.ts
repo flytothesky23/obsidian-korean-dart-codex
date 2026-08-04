@@ -4,6 +4,7 @@ import type KoreanDartCodexPlugin from "./plugin";
 import type { CodexPermissionMode, CodexReasoningEffort } from "./codexian-bridge";
 import type { DartRuntimeMode } from "./codex-provider";
 import { FALLBACK_CODEX_MODELS, modelCatalogToOptions } from "./codex-model-catalog";
+import type { KoreanDartMcpSource } from "./korean-dart-mcp-config";
 
 export interface KoreanDartCodexSettings {
   outputFolder: string;
@@ -14,6 +15,7 @@ export interface KoreanDartCodexSettings {
   persistSession: boolean;
   codexAppServerTimeoutSeconds: number;
   codexSettingsSource: "codexian" | "custom";
+  koreanDartMcpSource: KoreanDartMcpSource;
   codexCommand: string;
   codexModel: string;
   reasoningEffort: CodexReasoningEffort;
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: KoreanDartCodexSettings = {
   persistSession: true,
   codexAppServerTimeoutSeconds: 30,
   codexSettingsSource: "codexian",
+  koreanDartMcpSource: "managed",
   codexCommand: "codex",
   codexModel: "gpt-5.5",
   reasoningEffort: "medium",
@@ -100,6 +103,42 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
             this.display();
           }),
       );
+
+    new Setting(containerEl)
+      .setName("Korean DART MCP")
+      .setDesc("Managed mode injects korean-dart-mcp@0.10.1 into this plugin's Codex process, so global `codex mcp add` setup is not required.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            managed: "Managed automatically (recommended)",
+            "codex-config": "Use existing Codex MCP config",
+          })
+          .setValue(this.plugin.settings.koreanDartMcpSource)
+          .onChange(async (value) => {
+            this.plugin.settings.koreanDartMcpSource = value === "codex-config" ? "codex-config" : "managed";
+            this.plugin.invalidateKoreanDartMcpStatus();
+            this.plugin.resetDartSession();
+            await this.plugin.saveSettings();
+            this.display();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("OpenDART API key")
+      .setDesc("Stored in Obsidian SecretStorage, not data.json, and injected only into the local Codex runtime. The MCP badge confirms server/tool startup; OpenDART validates the key on the first data call.")
+      .addText((text) => {
+        text
+          .setPlaceholder("OpenDART API key")
+          .setValue(this.plugin.getDartApiKey())
+          .onChange(async (value) => {
+            this.plugin.setDartApiKey(value);
+            this.plugin.invalidateKoreanDartMcpStatus();
+            this.plugin.resetDartSession();
+          });
+        text.inputEl.type = "password";
+        text.inputEl.autocomplete = "off";
+        text.inputEl.spellcheck = false;
+      });
 
     new Setting(containerEl)
       .setName("Runtime mode")
@@ -212,10 +251,10 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("Environment variables")
-        .setDesc("One KEY=VALUE per line. Vault .env is also loaded before Codex starts; explicit values here override .env. Use DART_API_KEY here if Codex MCP config does not already define it.")
+        .setDesc("One KEY=VALUE per line for advanced runtime overrides. Vault .env is loaded first; explicit values here override it. Use the masked OpenDART field above for DART_API_KEY.")
         .addTextArea((text) => {
           text
-            .setPlaceholder("DART_API_KEY=your-opendart-api-key\nCODEX_HOME=~/.codex")
+            .setPlaceholder("CODEX_HOME=~/.codex\nPATH=/usr/local/bin:/usr/bin")
             .setValue(this.plugin.settings.environmentVariables)
             .onChange(async (value) => {
               this.plugin.settings.environmentVariables = value;
@@ -257,7 +296,9 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
 
     containerEl.createDiv({
       cls: "korean-dart-codex-settings-hint",
-      text: "Required MCP: korean-dart. The plugin automatically adds common Windows Node/npm and macOS Homebrew paths before launching Codex. Check `codex mcp list` if queries fail.",
+      text: this.plugin.settings.koreanDartMcpSource === "managed"
+        ? "Managed MCP uses korean-dart-mcp@0.10.1 without changing global Codex configuration. Node.js 20.19+ and an OpenDART API key are required."
+        : "Codex config mode requires an enabled MCP named korean-dart and env_vars=[\"DART_API_KEY\"] to use the masked key above. Check `codex mcp get korean-dart --json` if queries fail.",
     });
   }
 }

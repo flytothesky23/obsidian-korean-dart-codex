@@ -8,6 +8,7 @@ import {
 } from "./codex-cli";
 import type { CodexPermissionMode } from "./codexian-bridge";
 import type { DartAgentEvent, DartAgentProvider, DartAgentQuery } from "./codex-provider";
+import { applyKoreanDartMcpConfig } from "./korean-dart-mcp-config";
 
 type JsonObject = Record<string, unknown>;
 
@@ -139,7 +140,11 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
 
     const command = resolveCodexCommand(input.command);
     const env = buildCodexEnvironment(input.environmentVariables, command, { cwd: input.cwd });
-    const spawnPlan = createCodexSpawnPlan(command, ["app-server", "--listen", "stdio://"]);
+    const args = applyKoreanDartMcpConfig(
+      ["app-server", "--listen", "stdio://"],
+      input.koreanDartMcpSource,
+    );
+    const spawnPlan = createCodexSpawnPlan(command, args);
     this.stderr = "";
 
     try {
@@ -168,7 +173,7 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
 
     try {
       await transport.request("initialize", {
-        clientInfo: { name: "korean-dart-codex", version: "0.1.0" },
+        clientInfo: { name: "korean-dart-codex", version: "0.1.1" },
         capabilities: { experimentalApi: true },
       }, input.appServerTimeoutMs);
       transport.notify("initialized");

@@ -22,6 +22,7 @@ export function renderMcpStatusButton(
 
 export function mcpStatusLabel(status: KoreanDartMcpStatus): string {
   if (status.state === "ready") return `MCP ${status.version}`;
+  if (status.state === "missing" && status.authStatus === "missing") return "API 키 필요";
   if (status.state === "missing") return "MCP 없음";
   if (status.state === "failed") return "MCP 오류";
   return "MCP 확인 중";
@@ -32,7 +33,7 @@ export function mcpStatusTooltip(status: KoreanDartMcpStatus): string {
     return [
       `korean-dart MCP ${status.version} 연결됨`,
       `${status.toolCount}개 공개 도구`,
-      status.authStatus === "configured" ? "Codex 등록 설정 사용" : status.authStatus ? `인증 ${status.authStatus}` : "",
+      status.source === "managed" ? "플러그인 자동 관리" : "Codex 등록 설정 사용",
     ].filter(Boolean).join(" · ");
   }
   if (status.state === "missing") return status.error || "Codex MCP 설정에서 korean-dart 서버를 찾지 못했습니다.";
@@ -42,6 +43,7 @@ export function mcpStatusTooltip(status: KoreanDartMcpStatus): string {
 
 export function mcpWelcomeLabel(status: KoreanDartMcpStatus): string {
   if (status.state === "ready") return `korean-dart MCP ${status.version} 연결됨`;
+  if (status.state === "missing" && status.authStatus === "missing") return "OpenDART API 키 필요";
   if (status.state === "missing") return "korean-dart MCP 설정 필요";
   if (status.state === "failed") return "korean-dart MCP 확인 필요";
   return "korean-dart MCP 확인 중";

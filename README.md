@@ -14,6 +14,8 @@ Markdown 노트로 저장하는 데스크톱 플러그인입니다.
 
 - `codex app-server --listen stdio://` 기반 스트리밍 대화
 - Codex CLI의 ChatGPT OAuth 로그인 재사용 (`codex login`)
+- 전역 Codex 설정을 바꾸지 않는 `korean-dart-mcp@0.10.1` 자동 관리 모드
+- Obsidian SecretStorage 기반 OpenDART API 키 설정
 - `korean-dart` MCP 우선 공시·재무·XBRL·지분·첨부문서 조사
 - MCP 서버 버전과 실제 `tools/list` 결과를 확인하는 상태 배지
 - 대화 세션 유지, 취소, 모델·추론 강도 선택, `codex exec` 폴백
@@ -28,12 +30,12 @@ Markdown 노트로 저장하는 데스크톱 플러그인입니다.
 
 ## 요구사항
 
-- Obsidian Desktop 1.5.0 이상
+- Obsidian Desktop 1.11.4 이상
 - Node.js 20.19 이상
 - OpenAI Codex CLI
 - Codex의 ChatGPT OAuth 로그인 또는 지원되는 API 인증
 - OpenDART API 인증키 (`DART_API_KEY`)
-- Codex에 등록된 `korean-dart` MCP 서버
+- 관리형 MCP를 내려받을 수 있는 npm 네트워크 또는 기존 Codex MCP 등록
 
 `korean-dart-mcp`는 STDIO MCP 서버이며 OpenDART 인증에
 `DART_API_KEY`를 사용합니다. Codex 로그인 토큰과 OpenDART 키는 서로 다른
@@ -58,30 +60,34 @@ npm install -g @openai/codex
 brew install --cask codex
 ```
 
-### 2. Korean DART MCP 등록
+### 2. OpenDART API 키와 Korean DART MCP
 
-OpenDART에서 무료 인증키를 발급한 뒤 `korean-dart-mcp`를 설치합니다.
-현재 통합 기준 버전은 `0.10.1`입니다.
+OpenDART에서 무료 인증키를 발급한 뒤 Obsidian의
+`설정 → Korean DART Codex → OpenDART API key`에 입력합니다. 입력란은
+마스킹되며 값은 일반 플러그인 `data.json`이 아니라 Obsidian
+SecretStorage에 저장됩니다. 패널 로그와 진단 메시지에서는 키를
+가림 처리합니다.
 
-```bash
-npm install -g korean-dart-mcp@0.10.1
+패널의 `MCP x.y.z` 배지는 서버 초기화와 도구 목록을 확인한 결과입니다.
+OpenDART가 키를 실제로 승인하는지는 첫 데이터 조회에서 검증되며, 오류
+`100`이 나오면 발급 페이지의 승인 상태와 입력값을 다시 확인합니다.
+
+기본 `Korean DART MCP` 설정은 `Managed automatically`입니다. 플러그인은
+Codex app-server와 exec를 시작할 때 아래 고정 서버 정의를 해당 프로세스에만
+주입합니다. 키 값 자체는 명령행에 넣지 않고 Codex의 MCP 환경변수 allowlist로
+`DART_API_KEY` 이름만 전달합니다.
+
+```text
+npx -y korean-dart-mcp@0.10.1
 ```
 
-데스크톱 앱의 PATH 차이를 피하려면 절대 경로를 확인합니다.
+따라서 전역 `~/.codex/config.toml`을 수정하거나 `codex mcp add`를 먼저
+실행할 필요가 없습니다. 첫 실행은 npm 패키지를 확인하므로 네트워크 상태에
+따라 조금 더 걸릴 수 있습니다.
 
-macOS/Linux:
-
-```bash
-command -v node
-npm root -g
-```
-
-Windows PowerShell:
-
-```powershell
-(Get-Command node.exe).Source
-npm root -g
-```
+기존에 직접 관리하는 MCP를 사용하려면 `Korean DART MCP`를
+`Use existing Codex MCP config`로 바꾸고 아래처럼 이름을 정확히
+`korean-dart`로 등록합니다.
 
 `~/.codex/config.toml` 또는 Windows의
 `%USERPROFILE%\.codex\config.toml`에 다음을 추가합니다.
@@ -90,21 +96,20 @@ npm root -g
 [mcp_servers.korean-dart]
 command = "/absolute/path/to/node"
 args = ["/absolute/path/to/node_modules/korean-dart-mcp/build/index.js"]
+env_vars = ["DART_API_KEY"]
 startup_timeout_sec = 30
 tool_timeout_sec = 180
-
-[mcp_servers.korean-dart.env]
-DART_API_KEY = "replace-with-your-opendart-api-key"
 ```
 
-간단한 `npx` 등록도 가능합니다.
+간단한 등록 명령도 사용할 수 있습니다.
 
 ```bash
 codex mcp add korean-dart -- npx -y korean-dart-mcp@0.10.1
 ```
 
-이 경우에도 `DART_API_KEY`는 Codex MCP 환경 설정에 추가해야 합니다.
-키를 셸 명령 인수나 Git 저장소에 직접 남기지 마세요.
+기존 Codex config 모드에서 플러그인의 마스킹 키 설정을 사용하려면 위처럼
+`env_vars = ["DART_API_KEY"]` allowlist가 필요합니다. 키 값을 셸 명령 인수,
+Codex config 또는 Git 저장소에 직접 남기지 마세요.
 
 확인:
 
@@ -184,16 +189,18 @@ npm run release:check
 
 ```bash
 npm run smoke:mcp:appserver
+npm run smoke:mcp:health
 npm run smoke:mcp:contract
 npm run smoke:dart:appserver
 npm run smoke:models:appserver
 ```
 
-`smoke:mcp:contract`는 API 키 없이 upstream 서버의 초기화와 도구 계약만
-검증합니다. 실제 OpenDART 호출은 유효한 키를 설정한 뒤
-`npm run smoke:mcp:live`로 삼성전자 기업개황 응답까지 확인합니다. MCP 상태
-smoke는 로컬 Codex에 `korean-dart`가 등록되어 있어야 하며, DART 실데이터
-질문은 유효한 `DART_API_KEY`를 사용합니다.
+`smoke:mcp:appserver`는 관리형 설정이 실제 Codex app-server 안에서
+`korean-dart` 도구를 노출하는지 확인합니다. `smoke:mcp:health`는 패널 상태
+배지와 같은 직접 MCP 건강검사입니다. `smoke:mcp:contract`는 API 키 없이
+upstream 서버의 초기화와 도구 계약만 검증합니다. 실제 OpenDART 호출은
+유효한 키를 설정한 뒤 `npm run smoke:mcp:live`로 삼성전자 기업개황 응답까지
+확인합니다.
 
 ## Upstream 주의사항
 

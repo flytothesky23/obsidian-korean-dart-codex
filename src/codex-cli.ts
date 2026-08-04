@@ -3,6 +3,10 @@ import { existsSync, readFileSync, rmSync } from "fs";
 import { tmpdir, homedir } from "os";
 import { delimiter, dirname, join, sep, win32 } from "path";
 import type { CodexPermissionMode } from "./codexian-bridge";
+import {
+  applyKoreanDartMcpConfig,
+  type KoreanDartMcpSource,
+} from "./korean-dart-mcp-config";
 
 export interface CodexCliResult {
   stdout: string;
@@ -169,6 +173,7 @@ export async function runCodexExec(params: {
   reasoningEffort?: string;
   permissionMode?: CodexPermissionMode;
   environmentVariables?: string;
+  koreanDartMcpSource?: KoreanDartMcpSource;
   timeoutMs: number;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
@@ -186,13 +191,13 @@ export async function runCodexExec(params: {
       `korean-dart-codex-last-message-${Date.now()}-${Math.random().toString(36).slice(2)}.md`,
     );
     const env = buildCodexEnvironment(params.environmentVariables, command, { cwd: params.cwd });
-    const args = codexExecArgs({
+    const args = applyKoreanDartMcpConfig(codexExecArgs({
       model: params.model,
       reasoningEffort: params.reasoningEffort,
       permissionMode: params.permissionMode,
       cwd: params.cwd,
       outputLastMessagePath,
-    });
+    }), params.koreanDartMcpSource);
     const spawnPlan = createCodexSpawnPlan(command, args);
     const child = spawn(spawnPlan.command, spawnPlan.args, {
       cwd: params.cwd,

@@ -7,6 +7,11 @@ import {
   resolveCodexCommand,
 } from "./codex-cli";
 import type { CodexRuntimeConfig } from "./codexian-bridge";
+import {
+  hasDartApiKey,
+  managedKoreanDartMcpConfig,
+  type KoreanDartMcpSource,
+} from "./korean-dart-mcp-config";
 
 type JsonObject = Record<string, unknown>;
 
@@ -20,6 +25,7 @@ export interface KoreanDartMcpStatus {
   authStatus: string;
   checkedAt: number;
   error: string;
+  source?: KoreanDartMcpSource;
 }
 
 export interface CodexMcpStdioConfig {
@@ -47,28 +53,40 @@ export async function discoverKoreanDartMcpStatus(input: {
 }): Promise<KoreanDartMcpStatus> {
   const codexCommand = resolveCodexCommand(input.runtime.command);
   const baseEnv = buildCodexEnvironment(input.runtime.environmentVariables, codexCommand, { cwd: input.cwd });
-  const configResult = await readCodexMcpConfig({
-    command: codexCommand,
-    cwd: input.cwd,
-    env: baseEnv,
-    timeoutMs: Math.min(input.timeoutMs, 10_000),
-    spawn,
-    createCodexSpawnPlan,
-    decodeProcessChunk,
-  });
-  const config = parseCodexMcpConfig(configResult.stdout);
-  if (!config) {
-    return missingStatus("Codex MCP 설정에서 korean-dart 서버를 찾지 못했습니다.");
+  const source = input.runtime.koreanDartMcpSource ?? "managed";
+  let config: CodexMcpStdioConfig;
+  if (source === "managed") {
+    config = { enabled: true, ...managedKoreanDartMcpConfig() };
+  } else {
+    const configResult = await readCodexMcpConfig({
+      command: codexCommand,
+      cwd: input.cwd,
+      env: baseEnv,
+      timeoutMs: Math.min(input.timeoutMs, 10_000),
+      spawn,
+      createCodexSpawnPlan,
+      decodeProcessChunk,
+    });
+    const configured = parseCodexMcpConfig(configResult.stdout);
+    if (!configured) {
+      return missingStatus("Codex MCP 설정에서 korean-dart 서버를 찾지 못했습니다.", source);
+    }
+    if (!configured.enabled) {
+      return missingStatus("Codex MCP 설정에서 korean-dart 서버가 비활성화되어 있습니다.", source);
+    }
+    config = configured;
   }
-  if (!config.enabled) {
-    return missingStatus("Codex MCP 설정에서 korean-dart 서버가 비활성화되어 있습니다.");
+
+  const processEnv = { ...baseEnv, ...config.env };
+  if (!hasDartApiKey(processEnv)) {
+    return missingStatus("OpenDART API 키가 설정되지 않았습니다. 플러그인 설정에서 API 키를 입력하세요.", source, "missing");
   }
 
   const spawnPlan = createCodexSpawnPlan(config.command, config.args);
   const child = spawn(spawnPlan.command, spawnPlan.args, {
     cwd: config.cwd || input.cwd,
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...baseEnv, ...config.env },
+    env: processEnv,
     shell: spawnPlan.shell,
     windowsHide: true,
   });
@@ -86,11 +104,11 @@ export async function discoverKoreanDartMcpStatus(input: {
     const initialized = await transport.request("initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
-      clientInfo: { name: "korean-dart-codex-mcp-status", version: "0.1.0" },
+      clientInfo: { name: "korean-dart-codex-mcp-status", version: "0.1.1" },
     }, input.timeoutMs);
     transport.notify("notifications/initialized");
     const tools = await transport.request("tools/list", {}, input.timeoutMs);
-    return parseMcpHealth(initialized, tools);
+    return parseMcpHealth(initialized, tools, source);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const detail = stderr.trim();
@@ -127,11 +145,15 @@ export function parseCodexMcpConfig(value: string): CodexMcpStdioConfig | null {
   };
 }
 
-export function parseMcpHealth(initializeValue: unknown, toolsValue: unknown): KoreanDartMcpStatus {
+export function parseMcpHealth(
+  initializeValue: unknown,
+  toolsValue: unknown,
+  source: KoreanDartMcpSource = "codex-config",
+): KoreanDartMcpStatus {
   const serverInfo = asObject(asObject(initializeValue).serverInfo);
   const version = readString(serverInfo.version);
   if (!version) {
-    return failedStatus("korean-dart MCP가 초기화 응답에 버전 정보를 제공하지 않았습니다.");
+    return failedStatus("korean-dart MCP가 초기화 응답에 버전 정보를 제공하지 않았습니다.", source);
   }
   const tools = asObject(toolsValue).tools;
   return {
@@ -142,6 +164,7 @@ export function parseMcpHealth(initializeValue: unknown, toolsValue: unknown): K
     authStatus: "configured",
     checkedAt: Date.now(),
     error: "",
+    source,
   };
 }
 
@@ -203,21 +226,28 @@ function stopChild(child: ChildProcess): void {
   if (!child.killed) child.kill("SIGTERM");
 }
 
-function missingStatus(error: string): KoreanDartMcpStatus {
+function missingStatus(
+  error: string,
+  source?: KoreanDartMcpSource,
+  authStatus = "",
+): KoreanDartMcpStatus {
   return {
     ...INITIAL_KOREAN_DART_MCP_STATUS,
     state: "missing",
     checkedAt: Date.now(),
     error,
+    source,
+    authStatus,
   };
 }
 
-function failedStatus(error: string): KoreanDartMcpStatus {
+function failedStatus(error: string, source?: KoreanDartMcpSource): KoreanDartMcpStatus {
   return {
     ...INITIAL_KOREAN_DART_MCP_STATUS,
     state: "failed",
     checkedAt: Date.now(),
     error,
+    source,
   };
 }
 

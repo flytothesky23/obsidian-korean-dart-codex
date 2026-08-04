@@ -62,7 +62,7 @@ import {
   modelCatalogToOptions,
   type CodexModelCatalogItem,
 } from "./codex-model-catalog";
-import { KOREAN_DART_SCALE_SVG, setIconifyIcon, type IconifyName } from "./iconify";
+import { KOREAN_DART_CHART_SVG, setIconifyIcon, type IconifyName } from "./iconify";
 import {
   formatCodexActivity,
   shouldUpdateStatusFromCodexStderr,
@@ -107,8 +107,14 @@ import {
   mcpWelcomeLabel,
   renderMcpStatusButton,
 } from "./mcp-status-ui";
+import {
+  extractDartApiKey,
+  mergeDartApiKey,
+  prepareDartRuntimeForPersistence,
+} from "./korean-dart-mcp-config";
 
 const VIEW_TYPE = "korean-dart-codex-panel";
+const DART_API_KEY_SECRET_ID = "korean-dart-codex-api-key";
 
 const REASONING_OPTIONS: Array<[CodexReasoningEffort, string]> = [
   ["low", "Low"],
@@ -148,6 +154,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    await this.migrateLegacyDartApiKey();
     this.contextApi = Object.freeze({
       version: 2 as const,
       search: async (query: string, options?: VaultSearchOptions) => {
@@ -177,7 +184,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
     this.addSettingTab(new KoreanDartCodexSettingTab(this.app, this));
     this.registerView(VIEW_TYPE, (leaf) => new KoreanDartCodexPanelView(leaf, this));
 
-    this.addRibbonIcon("scale", "Open Korean DART Codex", () => {
+    this.addRibbonIcon("chart-candlestick", "Open Korean DART Codex", () => {
       void this.openPanel();
     });
 
@@ -227,6 +234,22 @@ export default class KoreanDartCodexPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  getDartApiKey(): string {
+    return this.app.secretStorage.getSecret(DART_API_KEY_SECRET_ID) ?? "";
+  }
+
+  setDartApiKey(value: string): void {
+    this.app.secretStorage.setSecret(DART_API_KEY_SECRET_ID, value.trim());
+  }
+
+  private async migrateLegacyDartApiKey(): Promise<void> {
+    const extracted = extractDartApiKey(this.settings.environmentVariables);
+    if (!extracted.dartApiKey) return;
+    if (!this.getDartApiKey()) this.setDartApiKey(extracted.dartApiKey);
+    this.settings.environmentVariables = extracted.environmentVariables;
+    await this.saveSettings();
   }
 
   getModelCatalog(): CodexModelCatalogItem[] {
@@ -326,6 +349,11 @@ export default class KoreanDartCodexPlugin extends Plugin {
       return {
         ...codexianRuntime,
         permissionMode: mcpCapablePermissionMode(codexianRuntime.permissionMode),
+        environmentVariables: mergeDartApiKey(
+          codexianRuntime.environmentVariables,
+          this.getDartApiKey(),
+        ),
+        koreanDartMcpSource: this.settings.koreanDartMcpSource,
       };
     }
     return {
@@ -334,7 +362,11 @@ export default class KoreanDartCodexPlugin extends Plugin {
       model: this.settings.codexModel,
       reasoningEffort: this.settings.reasoningEffort,
       permissionMode: this.settings.permissionMode,
-      environmentVariables: this.settings.environmentVariables,
+      environmentVariables: mergeDartApiKey(
+        this.settings.environmentVariables,
+        this.getDartApiKey(),
+      ),
+      koreanDartMcpSource: this.settings.koreanDartMcpSource,
     };
   }
 
@@ -394,6 +426,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
       runtimeMode: this.settings.runtimeMode,
       appServerFallback: this.settings.appServerFallback,
       persistSession: this.settings.persistSession,
+      koreanDartMcpSource: runtime.koreanDartMcpSource,
     })) {
       onEvent(event);
       if (event.type === "text-delta") answer += event.content;
@@ -420,6 +453,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
       reasoningEffort: runtime.reasoningEffort,
       permissionMode: runtime.permissionMode,
       environmentVariables: runtime.environmentVariables,
+      koreanDartMcpSource: runtime.koreanDartMcpSource,
       timeoutMs: this.settings.timeoutSeconds * 1000,
       onStdout: (chunk) => onChunk(chunk, "stdout"),
       onStderr: (chunk) => onChunk(chunk, "stderr"),
@@ -903,7 +937,7 @@ class KoreanDartCodexPanelView extends ItemView {
   }
 
   getIcon(): string {
-    return "scale";
+    return "chart-candlestick";
   }
 
   async onOpen(): Promise<void> {
@@ -995,7 +1029,7 @@ class KoreanDartCodexPanelView extends ItemView {
     const header = root.createDiv({ cls: "korean-dart-codex-header" });
     const brand = header.createDiv({ cls: "korean-dart-codex-brand" });
     const logo = brand.createDiv({ cls: "korean-dart-codex-logo" });
-    logo.innerHTML = KOREAN_DART_SCALE_SVG;
+    logo.innerHTML = KOREAN_DART_CHART_SVG;
     const title = brand.createDiv({ cls: "korean-dart-codex-title" });
     title.createEl("h2", { text: "Korean DART Codex" });
     title.createDiv({
@@ -1123,7 +1157,16 @@ class KoreanDartCodexPanelView extends ItemView {
     this.plugin.settings.codexCommand = runtime.command;
     if (runtime.model) this.plugin.settings.codexModel = runtime.model;
     this.plugin.settings.permissionMode = runtime.permissionMode;
-    this.plugin.settings.environmentVariables = runtime.environmentVariables;
+    // getRuntime() adds the SecretStorage value only for process launch. Never
+    // copy that launch-only value back into the persisted plugin settings.
+    const persisted = prepareDartRuntimeForPersistence(
+      runtime.environmentVariables,
+      this.plugin.getDartApiKey(),
+    );
+    if (persisted.dartApiKeyToStore) {
+      this.plugin.setDartApiKey(persisted.dartApiKeyToStore);
+    }
+    this.plugin.settings.environmentVariables = persisted.environmentVariables;
   }
 
   private async saveRuntimeChoice(source: "codexian" | "custom", message: string): Promise<void> {
@@ -1166,11 +1209,11 @@ class KoreanDartCodexPanelView extends ItemView {
     if (this.messages.length === 0) {
       const welcome = chat.createDiv({ cls: "korean-dart-codex-empty klc-welcome" });
       const card = welcome.createDiv({ cls: "klc-welcome-card" });
-      const markWrap = card.createDiv({ cls: "klc-scale-stage", attr: { "aria-hidden": "true" } });
-      markWrap.createDiv({ cls: "klc-scale-ripple klc-scale-ripple-a" });
-      markWrap.createDiv({ cls: "klc-scale-ripple klc-scale-ripple-b" });
-      const mark = markWrap.createDiv({ cls: "klc-scale-mark" });
-      mark.innerHTML = KOREAN_DART_SCALE_SVG;
+      const markWrap = card.createDiv({ cls: "klc-chart-stage", attr: { "aria-hidden": "true" } });
+      markWrap.createDiv({ cls: "klc-chart-ripple klc-chart-ripple-a" });
+      markWrap.createDiv({ cls: "klc-chart-ripple klc-chart-ripple-b" });
+      const mark = markWrap.createDiv({ cls: "klc-chart-mark" });
+      mark.innerHTML = KOREAN_DART_CHART_SVG;
       card.createDiv({ cls: "klc-welcome-kicker", text: "KOREAN DART CODEX" });
       card.createDiv({
         cls: "klc-welcome-maxim",

@@ -1,4 +1,5 @@
 import type { CodexPermissionMode, CodexReasoningEffort } from "./codexian-bridge";
+import type { KoreanDartMcpSource } from "./korean-dart-mcp-config";
 
 export type DartRuntimeMode = "app-server" | "exec";
 
@@ -15,6 +16,7 @@ export interface DartAgentQuery {
   runtimeMode: DartRuntimeMode;
   appServerFallback: boolean;
   persistSession: boolean;
+  koreanDartMcpSource?: KoreanDartMcpSource;
 }
 
 export type DartAgentEvent =

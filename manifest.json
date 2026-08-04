@@ -1,8 +1,8 @@
 {
   "id": "korean-dart-codex",
   "name": "Korean DART Codex",
-  "version": "0.1.0",
-  "minAppVersion": "1.5.0",
+  "version": "0.1.1",
+  "minAppVersion": "1.11.4",
   "description": "Research Korean public disclosures with Codex and korean-dart-mcp, then save source-backed notes.",
   "author": "flytothesky23",
   "isDesktopOnly": true

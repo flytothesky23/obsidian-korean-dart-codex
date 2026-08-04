@@ -34,7 +34,7 @@ try {
   const initialized = await transport.request<JsonObject>("initialize", {
     protocolVersion: "2025-06-18",
     capabilities: {},
-    clientInfo: { name: "korean-dart-codex-upstream-smoke", version: "0.1.0" },
+    clientInfo: { name: "korean-dart-codex-upstream-smoke", version: "0.1.1" },
   }, 45_000);
   transport.notify("notifications/initialized");
   const listed = await transport.request<JsonObject>("tools/list", {}, 45_000);

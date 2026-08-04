@@ -32,6 +32,19 @@ describe("Korean DART MCP status control", () => {
     expect(button.querySelector("[data-icon='unplug']")).not.toBeNull();
     expect(button.getAttribute("title")).toContain("연결 실패");
   });
+
+  it("distinguishes a missing OpenDART key from a missing MCP server", () => {
+    const button = document.createElement("button");
+    renderMcpStatusButton(button, status({
+      state: "missing",
+      authStatus: "missing",
+      source: "managed",
+      error: "OpenDART API 키가 설정되지 않았습니다.",
+    }), iconRenderer);
+
+    expect(button.textContent).toBe("API 키 필요");
+    expect(button.getAttribute("title")).toContain("OpenDART API 키");
+  });
 });
 
 function status(overrides: Partial<KoreanDartMcpStatus>): KoreanDartMcpStatus {

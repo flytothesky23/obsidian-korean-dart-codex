@@ -14,9 +14,13 @@ Korean DART Codex를 현재 Obsidian vault에 설치하고 검증하라.
 Obsidian Korean DART Codex -> Codex CLI app-server -> korean-dart MCP -> OpenDART.
 
 1. Node.js 20.19+, Codex CLI, `codex login status`를 확인한다.
-2. `korean-dart-mcp@0.10.1`를 설치한다.
-3. Codex MCP 이름을 `korean-dart`로 등록하고 `DART_API_KEY`를 MCP env에 넣는다.
-4. `codex mcp get korean-dart --json`과 MCP initialize/tools/list를 검증한다.
+2. 플러그인의 기본 `Managed automatically` 모드가
+   `korean-dart-mcp@0.10.1`과 `DART_API_KEY` 이름 allowlist를 app-server
+   프로세스에 주입하는지 확인한다. 키 값은 CLI 인수에 넣지 않는다.
+3. `DART_API_KEY`는 Obsidian SecretStorage 기반 마스킹 설정에 입력한다.
+4. 직접 MCP initialize/tools/list와 Codex app-server의
+   `mcpServerStatus/list` 도구 인벤토리를 각각 검증한다. 기존 Codex 설정
+   모드를 선택한 경우에만 `codex mcp get korean-dart --json`도 확인한다.
 5. 저장소를 빌드하고 `main.js`, `manifest.json`, `styles.css`를
    `<vault>/.obsidian/plugins/korean-dart-codex`에 배포한다.
 6. Obsidian에서 플러그인을 활성화하고 app-server 스트리밍, MCP 상태 배지,
@@ -37,7 +41,9 @@ Inputs:
 Target flow:
 Obsidian Korean DART Codex -> Codex CLI app-server -> korean-dart MCP -> OpenDART.
 
-Verify Node.js 20.19+, Codex login, korean-dart-mcp@0.10.1 registration,
-MCP initialize/tools/list, plugin build artifacts, app-server streaming, the
-MCP health badge, and saved-note metadata. Do not expose credentials.
+Verify Node.js 20.19+, Codex login, managed korean-dart-mcp@0.10.1 injection,
+the DART_API_KEY name-only allowlist, SecretStorage-backed API-key
+configuration, direct MCP initialize/tools/list, Codex app-server MCP inventory,
+plugin build artifacts, streaming, the MCP health badge, and saved-note
+metadata. Do not expose credentials or place the key value in CLI arguments.
 ```

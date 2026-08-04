@@ -285,7 +285,7 @@
   max-width: 360px;
 }
 
-.klc-scale-stage {
+.klc-chart-stage {
   display: grid;
   height: 82px;
   place-items: center;
@@ -293,8 +293,8 @@
   width: 96px;
 }
 
-.klc-scale-ripple {
-  animation: klc-law-ripple 5.4s ease-out infinite;
+.klc-chart-ripple {
+  animation: klc-market-ripple 5.4s ease-out infinite;
   border: 1px solid color-mix(in srgb, var(--klc-warm) 28%, transparent);
   border-radius: 999px;
   inset: 10px 8px;
@@ -303,12 +303,12 @@
   transform: scale(0.72);
 }
 
-.klc-scale-ripple-b {
+.klc-chart-ripple-b {
   animation-delay: 1.8s;
   border-color: color-mix(in srgb, var(--klc-accent) 23%, transparent);
 }
 
-.klc-scale-mark {
+.klc-chart-mark {
   color: var(--text-normal);
   height: 68px;
   position: relative;
@@ -316,31 +316,17 @@
   z-index: 1;
 }
 
-.klc-scale-mark svg {
+.klc-chart-mark svg {
   display: block;
   height: 100%;
   width: 100%;
 }
 
-.korean-dart-codex-logo .klc-scale-beam,
-.klc-scale-mark .klc-scale-beam {
-  animation: klc-scale-sway 5.4s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-}
-
-.korean-dart-codex-logo .klc-scale-left-pan,
-.klc-scale-mark .klc-scale-left-pan {
-  animation: klc-pan-left 5.4s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: 50% 0%;
-}
-
-.korean-dart-codex-logo .klc-scale-right-pan,
-.klc-scale-mark .klc-scale-right-pan {
-  animation: klc-pan-right 5.4s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: 50% 0%;
+.korean-dart-codex-logo .kdc-chart-trend,
+.klc-chart-mark .kdc-chart-trend {
+  animation: klc-chart-draw 3.2s ease-in-out infinite alternate;
+  stroke-dasharray: 128;
+  stroke-dashoffset: 0;
 }
 
 .klc-welcome-kicker {
@@ -1261,40 +1247,19 @@
   flex: 0 0 auto;
 }
 
-@keyframes klc-scale-sway {
-  0%,
-  100% {
-    transform: rotate(-1deg);
+@keyframes klc-chart-draw {
+  from {
+    stroke-dashoffset: 22;
+    opacity: 0.72;
   }
 
-  50% {
-    transform: rotate(1deg);
-  }
-}
-
-@keyframes klc-pan-left {
-  0%,
-  100% {
-    transform: translateY(1px);
-  }
-
-  50% {
-    transform: translateY(-1.5px);
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
   }
 }
 
-@keyframes klc-pan-right {
-  0%,
-  100% {
-    transform: translateY(-1.5px);
-  }
-
-  50% {
-    transform: translateY(1px);
-  }
-}
-
-@keyframes klc-law-ripple {
+@keyframes klc-market-ripple {
   0% {
     opacity: 0;
     transform: scale(0.72);
@@ -1387,13 +1352,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .korean-dart-codex-logo .klc-scale-beam,
-  .korean-dart-codex-logo .klc-scale-left-pan,
-  .korean-dart-codex-logo .klc-scale-right-pan,
-  .klc-scale-mark .klc-scale-beam,
-  .klc-scale-mark .klc-scale-left-pan,
-  .klc-scale-mark .klc-scale-right-pan,
-  .klc-scale-ripple,
+  .korean-dart-codex-logo .kdc-chart-trend,
+  .klc-chart-mark .kdc-chart-trend,
+  .klc-chart-ripple,
   .klc-welcome-card,
   .klc-welcome-maxim::after,
   .korean-dart-codex-panel.is-running .korean-dart-codex-status::after,
