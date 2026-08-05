@@ -66,4 +66,11 @@ describe("Codex status formatting", () => {
     expect(summarizeCodexStderr(dartAuth)).toBe("OpenDART API 키(DART_API_KEY) 확인 필요");
     expect(summarizeFailureMessage(dartAuth)).toBe("OpenDART API 키(DART_API_KEY)가 필요합니다.");
   });
+
+  it("distinguishes a KRX endpoint authorization rejection from Codex OAuth", () => {
+    const krxAuth = "korea-stock get_stock_trade_info failed: KRX API HTTP 오류 (status: 401): Unauthorized";
+
+    expect(summarizeCodexStderr(krxAuth)).toBe("KRX 인증키·서비스 승인 확인 필요");
+    expect(summarizeFailureMessage(krxAuth)).toContain("해당 주식 API 서비스 이용 승인");
+  });
 });

@@ -76,6 +76,32 @@ describe("resolveMcpElicitationRequest", () => {
     });
   });
 
+  it.each(["get_stock_base_info", "get_stock_trade_info"])(
+    "accepts the approved korea-stock KRX tool %s",
+    (toolName) => {
+      const decision = resolveMcpElicitationRequest({
+        serverName: "korea-stock",
+        _meta: { codex_approval_kind: "mcp_tool_call", tool_name: toolName },
+        requestedSchema: { type: "object", properties: {} },
+      });
+
+      expect(decision).toEqual({
+        result: { action: "accept", content: {}, _meta: null },
+        progress: `korea-stock/${toolName} 실행 승인`,
+      });
+    },
+  );
+
+  it("rejects korea-stock duplicate DART tools", () => {
+    const decision = resolveMcpElicitationRequest({
+      serverName: "korea-stock",
+      _meta: { codex_approval_kind: "mcp_tool_call", tool_name: "get_disclosure_list" },
+      requestedSchema: { type: "object", properties: {} },
+    });
+
+    expect(decision.result).toEqual({ action: "cancel", content: null, _meta: null });
+  });
+
   it("does not auto-answer korean-dart form requests that require fields", () => {
     const decision = resolveMcpElicitationRequest({
       serverName: "korean-dart",

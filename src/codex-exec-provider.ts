@@ -19,6 +19,7 @@ export class ExecDartProvider implements DartAgentProvider {
       permissionMode: input.permissionMode,
       environmentVariables: input.environmentVariables,
       koreanDartMcpSource: input.koreanDartMcpSource,
+      koreaStockMcpSource: input.koreaStockMcpSource,
       timeoutMs: input.timeoutMs,
       signal: this.abortController.signal,
       onStdout: (chunk) => queue.push({ type: "text-delta", content: chunk }),

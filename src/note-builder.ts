@@ -1,11 +1,19 @@
 import type { DataAdapter } from "obsidian";
 import type { ContextSnapshot } from "./dart-context";
+import {
+  normalizeResearchMode,
+  researchModeSources,
+  type ResearchMode,
+} from "./research-mode";
 
 export interface DartResearchMetadata {
   query: string;
+  research_mode: ResearchMode;
+  sources: string[];
   company_names: string[];
   corp_codes: string[];
   receipt_numbers: string[];
+  trading_dates: string[];
   tools_used: string[];
   generated_at: string;
   confidence: "low" | "medium" | "high";
@@ -17,20 +25,33 @@ export interface SavedNoteInput {
   outputFolder: string;
   createdAt?: Date;
   contextSnapshot?: ContextSnapshot | null;
+  researchMode?: ResearchMode;
 }
 
 export const DEFAULT_TAGS = ["dart", "opendart", "corporate-disclosure", "codex", "mcp"];
+export const KRX_TAGS = ["krx", "korean-stock", "market-data", "codex", "mcp"];
 
-export function parseDartMetadata(response: string, query: string, now = new Date()): DartResearchMetadata {
+export function parseDartMetadata(
+  response: string,
+  query: string,
+  now = new Date(),
+  fallbackMode: ResearchMode = "dart",
+): DartResearchMetadata {
+  const normalizedFallbackMode = normalizeResearchMode(fallbackMode);
   const match = response.match(/<!--\s*korean-dart-codex-meta\s*([\s\S]*?)\s*-->/);
   if (match) {
     try {
-      const parsed = JSON.parse(match[1]) as Partial<DartResearchMetadata>;
+      const parsed = JSON.parse(match[1]) as Partial<DartResearchMetadata> & { observation_dates?: unknown };
+      const researchMode = normalizeResearchMode(parsed.research_mode ?? normalizedFallbackMode);
+      const tradingDates = stringArray(parsed.trading_dates);
       return {
         query: stringValue(parsed.query) || query,
+        research_mode: researchMode,
+        sources: stringArray(parsed.sources).length ? stringArray(parsed.sources) : researchModeSources(researchMode),
         company_names: stringArray(parsed.company_names),
         corp_codes: stringArray(parsed.corp_codes),
         receipt_numbers: stringArray(parsed.receipt_numbers),
+        trading_dates: tradingDates.length ? tradingDates : stringArray(parsed.observation_dates),
         tools_used: stringArray(parsed.tools_used),
         generated_at: stringValue(parsed.generated_at) || now.toISOString(),
         confidence: normalizeConfidence(parsed.confidence),
@@ -42,10 +63,16 @@ export function parseDartMetadata(response: string, query: string, now = new Dat
 
   return {
     query,
+    research_mode: normalizedFallbackMode,
+    sources: researchModeSources(normalizedFallbackMode),
     company_names: inferCompanyNames(response),
     corp_codes: inferCorpCodes(response),
     receipt_numbers: inferReceiptNumbers(response),
-    tools_used: response.includes("korean-dart") ? ["korean-dart"] : [],
+    trading_dates: normalizedFallbackMode === "krx" ? inferTradingDates(response) : [],
+    tools_used: [
+      ...(response.includes("korean-dart") ? ["korean-dart"] : []),
+      ...(response.includes("korea-stock") ? ["korea-stock"] : []),
+    ],
     generated_at: now.toISOString(),
     confidence: "medium",
   };
@@ -57,7 +84,8 @@ export function stripMetadataBlock(response: string): string {
 
 export function buildResearchNote(input: SavedNoteInput): string {
   const createdAt = input.createdAt ?? new Date();
-  const metadata = parseDartMetadata(input.response, input.query, createdAt);
+  const researchMode = normalizeResearchMode(input.researchMode);
+  const metadata = parseDartMetadata(input.response, input.query, createdAt, researchMode);
   const cleanedResponse = stripMetadataBlock(input.response);
   const summary = firstUsefulParagraph(cleanedResponse);
   const contextFrontmatter = input.contextSnapshot
@@ -79,14 +107,17 @@ export function buildResearchNote(input: SavedNoteInput): string {
     `type: korean-dart-research`,
     `query: ${yamlString(metadata.query)}`,
     `created: ${yamlString(formatIsoLocal(createdAt))}`,
-    `source: korean-dart-mcp`,
+    `research_mode: ${yamlString(metadata.research_mode)}`,
+    `source: ${metadata.research_mode === "krx" ? "korea-stock-mcp" : "korean-dart-mcp"}`,
+    yamlArray("sources", metadata.sources),
     ...contextFrontmatter,
     yamlArray("company_names", metadata.company_names),
     yamlArray("corp_codes", metadata.corp_codes),
     yamlArray("receipt_numbers", metadata.receipt_numbers),
+    yamlArray("trading_dates", metadata.trading_dates),
     yamlArray("tools_used", metadata.tools_used),
     `confidence: ${yamlString(metadata.confidence)}`,
-    yamlArray("tags", DEFAULT_TAGS),
+    yamlArray("tags", metadata.research_mode === "krx" ? KRX_TAGS : DEFAULT_TAGS),
     "---",
     "",
     "# 질문",
@@ -106,11 +137,23 @@ export function buildResearchNote(input: SavedNoteInput): string {
     metadata.receipt_numbers.length
       ? metadata.receipt_numbers.map((item) => `- 접수번호 ${item}`).join("\n")
       : "- _원문 응답 참고_",
+    ...(metadata.research_mode === "krx" ? [
+      "",
+      "# 시장 기준일",
+      "",
+      metadata.trading_dates.length
+        ? metadata.trading_dates.map((item) => `- ${item}`).join("\n")
+        : "- _원문 응답의 KRX 기준일을 확인하세요._",
+    ] : []),
     "",
     "# 검토 포인트",
     "",
-    "- 이 노트는 Codex와 korean-dart MCP로 생성한 OpenDART 공시 리서치 기록입니다.",
-    "- 투자 판단 전에는 원문 공시, 정정공시, 기준 기간, 단위와 연결·별도 재무제표 구분을 재확인하세요.",
+    metadata.research_mode === "krx"
+      ? "- 이 노트는 Codex와 korea-stock MCP로 생성한 한국거래소 통계정보 기반 일별 시장 리서치 기록입니다."
+      : "- 이 노트는 Codex와 korean-dart MCP로 생성한 OpenDART 공시 리서치 기록입니다.",
+    metadata.research_mode === "krx"
+      ? "- 지난 거래일의 종가·거래량은 KRX 장 마감 확정 데이터입니다. 당일 데이터는 KRX 일별 자료 게시 전까지 미완료이거나 제공되지 않을 수 있습니다."
+      : "- 투자 판단 전에는 원문 공시, 정정공시, 기준 기간, 단위와 연결·별도 재무제표 구분을 재확인하세요.",
     "",
     "# 원문 응답",
     "",
@@ -125,9 +168,14 @@ export function buildResearchNote(input: SavedNoteInput): string {
   ].join("\n");
 }
 
-export function buildResearchNotePath(query: string, outputFolder: string, now = new Date()): string {
+export function buildResearchNotePath(
+  query: string,
+  outputFolder: string,
+  now = new Date(),
+  researchMode: ResearchMode = "dart",
+): string {
   const prefix = formatTimestamp(now);
-  const title = sanitizeFileName(query).slice(0, 70) || "DART 리서치";
+  const title = sanitizeFileName(query).slice(0, 70) || (researchMode === "krx" ? "KRX 리서치" : "DART 리서치");
   return normalizeVaultPath(`${outputFolder}/${prefix} - ${title}.md`);
 }
 
@@ -168,6 +216,12 @@ function inferCorpCodes(response: string): string[] {
 
 function inferReceiptNumbers(response: string): string[] {
   return uniqueMatches(response, /(?:rcept_no|rcpNo|접수번호)\s*[:=：]?\s*([0-9]{14})\b/gi).slice(0, 30);
+}
+
+function inferTradingDates(response: string): string[] {
+  const compact = uniqueMatches(response, /(?:기준일|basDd|BAS_DD)\s*[:=：]?\s*([0-9]{8})\b/gi);
+  const dashed = uniqueMatches(response, /(?:기준일|거래일)\s*[:=：]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\b/g);
+  return [...new Set([...compact, ...dashed])].slice(0, 40);
 }
 
 function uniqueMatches(value: string, regex: RegExp): string[] {

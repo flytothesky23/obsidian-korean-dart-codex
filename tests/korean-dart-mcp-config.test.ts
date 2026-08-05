@@ -1,3 +1,4 @@
+import { statSync } from "fs";
 import { describe, expect, it } from "vitest";
 import {
   applyKoreanDartMcpConfig,
@@ -11,13 +12,16 @@ import {
 
 describe("managed Korean DART MCP configuration", () => {
   it("injects a pinned korean-dart server into app-server arguments", () => {
+    const managed = managedKoreanDartMcpConfig();
     expect(applyKoreanDartMcpConfig(["app-server", "--listen", "stdio://"])).toEqual([
       "--config",
-      'mcp_servers.korean-dart.command="npx"',
+      `mcp_servers.korean-dart.command=${JSON.stringify(managed.command)}`,
       "--config",
-      `mcp_servers.korean-dart.args=["-y","${KOREAN_DART_MCP_PACKAGE}"]`,
+      `mcp_servers.korean-dart.args=${JSON.stringify(managed.args)}`,
       "--config",
       'mcp_servers.korean-dart.env_vars=["DART_API_KEY"]',
+      "--config",
+      `mcp_servers.korean-dart.cwd=${JSON.stringify(managed.cwd)}`,
       "app-server",
       "--listen",
       "stdio://",
@@ -25,16 +29,19 @@ describe("managed Korean DART MCP configuration", () => {
   });
 
   it("keeps exec first for the shared codexian wrapper", () => {
+    const managed = managedKoreanDartMcpConfig();
     const args = applyKoreanDartMcpConfig(["exec", "--color", "never"]);
 
     expect(args[0]).toBe("exec");
-    expect(args.slice(1, 7)).toEqual([
+    expect(args.slice(1, 9)).toEqual([
       "--config",
-      'mcp_servers.korean-dart.command="npx"',
+      `mcp_servers.korean-dart.command=${JSON.stringify(managed.command)}`,
       "--config",
-      `mcp_servers.korean-dart.args=["-y","${KOREAN_DART_MCP_PACKAGE}"]`,
+      `mcp_servers.korean-dart.args=${JSON.stringify(managed.args)}`,
       "--config",
       'mcp_servers.korean-dart.env_vars=["DART_API_KEY"]',
+      "--config",
+      `mcp_servers.korean-dart.cwd=${JSON.stringify(managed.cwd)}`,
     ]);
   });
 
@@ -44,12 +51,12 @@ describe("managed Korean DART MCP configuration", () => {
   });
 
   it("uses the pinned npm package for direct health checks", () => {
-    expect(managedKoreanDartMcpConfig()).toEqual({
-      command: "npx",
-      args: ["-y", "korean-dart-mcp@0.10.1"],
-      cwd: null,
-      env: {},
-    });
+    const managed = managedKoreanDartMcpConfig();
+    expect(managed.command).toBe("node");
+    expect(managed.args.slice(-3)).toEqual([KOREAN_DART_MCP_PACKAGE, "korean-dart-mcp", "korean-dart-mcp"]);
+    if (process.platform !== "win32") expect(statSync(managed.args[0]).mode & 0o777).toBe(0o600);
+    expect(managed.cwd).toContain("korean-dart-mcp");
+    expect(managed.env).toEqual({});
   });
 });
 

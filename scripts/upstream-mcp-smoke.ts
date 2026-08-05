@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import { AppServerTransport } from "../src/appserver-transport";
+import { shouldCreateProcessGroup, terminateProcessTree } from "../src/process-tree";
 
 type JsonObject = Record<string, unknown>;
 
@@ -18,6 +19,7 @@ const child = spawn(command, ["-y", packageSpec], {
     DART_API_KEY: dartApiKey || "contract-smoke-placeholder",
   },
   windowsHide: true,
+  detached: shouldCreateProcessGroup(),
 });
 
 let stderr = "";
@@ -34,7 +36,7 @@ try {
   const initialized = await transport.request<JsonObject>("initialize", {
     protocolVersion: "2025-06-18",
     capabilities: {},
-    clientInfo: { name: "korean-dart-codex-upstream-smoke", version: "0.1.1" },
+    clientInfo: { name: "korean-dart-codex-upstream-smoke", version: "0.2.0" },
   }, 45_000);
   transport.notify("notifications/initialized");
   const listed = await transport.request<JsonObject>("tools/list", {}, 45_000);
@@ -80,6 +82,5 @@ try {
   throw new Error([error instanceof Error ? error.message : String(error), detail].filter(Boolean).join("\n"));
 } finally {
   transport.dispose();
-  child.stdin?.end();
-  if (!child.killed) child.kill("SIGTERM");
+  await terminateProcessTree(child);
 }

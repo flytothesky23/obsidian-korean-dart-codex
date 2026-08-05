@@ -1,5 +1,6 @@
 import type { App } from "obsidian";
 import type { KoreanDartMcpSource } from "./korean-dart-mcp-config";
+import type { KoreaStockMcpSource } from "./korea-stock-mcp-config";
 
 export type CodexPermissionMode = "review" | "auto" | "yolo";
 export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
@@ -13,6 +14,7 @@ export interface CodexRuntimeConfig {
   environmentVariables: string;
   mediaFolder?: string;
   koreanDartMcpSource?: KoreanDartMcpSource;
+  koreaStockMcpSource?: KoreaStockMcpSource;
 }
 
 interface CodexForObsidianRuntimeSettings {

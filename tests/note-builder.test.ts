@@ -27,13 +27,47 @@ describe("parseDartMetadata", () => {
 
     expect(parseDartMetadata(response, "fallback")).toEqual({
       query: "삼성전자 사업보고서",
+      research_mode: "dart",
+      sources: ["korean-dart-mcp"],
       company_names: ["삼성전자"],
       corp_codes: ["00126380"],
       receipt_numbers: ["20260312000736"],
+      trading_dates: [],
       tools_used: ["korean-dart.search_disclosures"],
       generated_at: "2026-08-04T10:00:00.000Z",
       confidence: "high",
     });
+  });
+
+  it("creates KRX frontmatter with trading dates and finalized market-data guidance", () => {
+    const note = buildResearchNote({
+      query: "삼성전자 일별 시세",
+      researchMode: "krx",
+      response: [
+        "기준일: 20260804, 종가와 거래량을 확인했습니다.",
+        "<!-- korean-dart-codex-meta",
+        JSON.stringify({
+          query: "삼성전자 일별 시세",
+          research_mode: "krx",
+          sources: ["korea-stock-mcp"],
+          company_names: ["삼성전자"],
+          corp_codes: [],
+          receipt_numbers: [],
+          trading_dates: ["20260804"],
+          tools_used: ["korea-stock.get_stock_trade_info"],
+          generated_at: "2026-08-05T00:00:00.000Z",
+          confidence: "high",
+        }),
+        "-->",
+      ].join("\n"),
+      outputFolder: "00_수집함/DART Research",
+    });
+
+    expect(note).toContain('research_mode: "krx"');
+    expect(note).toContain("source: korea-stock-mcp");
+    expect(note).toContain('  - "20260804"');
+    expect(note).toContain("# 시장 기준일");
+    expect(note).toContain("장 마감 확정 데이터입니다");
   });
 
   it("falls back to DART identifier heuristics", () => {

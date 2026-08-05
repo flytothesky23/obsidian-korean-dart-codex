@@ -9,6 +9,8 @@ import {
 import type { CodexPermissionMode } from "./codexian-bridge";
 import type { DartAgentEvent, DartAgentProvider, DartAgentQuery } from "./codex-provider";
 import { applyKoreanDartMcpConfig } from "./korean-dart-mcp-config";
+import { applyKoreaStockMcpConfig } from "./korea-stock-mcp-config";
+import { shouldCreateProcessGroup, terminateProcessTree } from "./process-tree";
 
 type JsonObject = Record<string, unknown>;
 
@@ -43,6 +45,7 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
   private wake: (() => void) | null = null;
   private stderr = "";
   private seenProgress = new Set<string>();
+  private shutdownPromise: Promise<void> | null = null;
 
   async *query(input: DartAgentQuery): AsyncGenerator<DartAgentEvent> {
     this.events = [];
@@ -127,22 +130,38 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
   }
 
   shutdown(): void {
+    void this.stopProcess();
+  }
+
+  private async stopProcess(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    const child = this.child;
     this.transport?.dispose();
     this.transport = null;
-    this.child?.kill();
     this.child = null;
     this.resetSession();
+    if (!child) return;
+
+    let task: Promise<void>;
+    task = terminateProcessTree(child).finally(() => {
+      if (this.shutdownPromise === task) this.shutdownPromise = null;
+    });
+    this.shutdownPromise = task;
+    return task;
   }
 
   private async ensureReady(input: DartAgentQuery): Promise<void> {
     if (this.child && !this.child.killed && this.transport) return;
-    this.shutdown();
+    await this.stopProcess();
 
     const command = resolveCodexCommand(input.command);
     const env = buildCodexEnvironment(input.environmentVariables, command, { cwd: input.cwd });
-    const args = applyKoreanDartMcpConfig(
-      ["app-server", "--listen", "stdio://"],
-      input.koreanDartMcpSource,
+    const args = applyKoreaStockMcpConfig(
+      applyKoreanDartMcpConfig(
+        ["app-server", "--listen", "stdio://"],
+        input.koreanDartMcpSource,
+      ),
+      input.koreaStockMcpSource,
     );
     const spawnPlan = createCodexSpawnPlan(command, args);
     this.stderr = "";
@@ -153,6 +172,7 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
         stdio: ["pipe", "pipe", "pipe"],
         env,
         shell: spawnPlan.shell,
+        detached: shouldCreateProcessGroup(),
         windowsHide: true,
       });
     } catch (error) {
@@ -173,13 +193,13 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
 
     try {
       await transport.request("initialize", {
-        clientInfo: { name: "korean-dart-codex", version: "0.1.1" },
+        clientInfo: { name: "korean-dart-codex", version: "0.2.0" },
         capabilities: { experimentalApi: true },
       }, input.appServerTimeoutMs);
       transport.notify("initialized");
       this.pushProgress("Codex app-server 연결 완료");
     } catch (error) {
-      this.shutdown();
+      await this.stopProcess();
       const detail = [error instanceof Error ? error.message : String(error), this.stderr.trim()].filter(Boolean).join("\n");
       throw new CodexAppServerUnavailableError(`initialize 실패: ${detail}`);
     }
@@ -279,6 +299,8 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
         const status = extractText(payload, ["status", "state", "message"]);
         if (server.includes("korean-dart") || status.includes("korean-dart")) {
           this.pushProgress(`korean-dart MCP 상태: ${status || "startup updated"}`);
+        } else if (server.includes("korea-stock") || status.includes("korea-stock")) {
+          this.pushProgress(`korea-stock MCP 상태: ${status || "startup updated"}`);
         }
         break;
       }
@@ -382,8 +404,10 @@ export class CodexAppServerDartProvider implements DartAgentProvider {
 const KOREAN_DART_BASE_INSTRUCTIONS = [
   "You are Korean DART Codex inside Obsidian.",
   "Use korean-dart MCP for Korean corporate-disclosure and financial research before general reasoning.",
+  "Use korea-stock only for KRX daily stock base and trade data through get_stock_base_info and get_stock_trade_info.",
+  "Never use korea-stock duplicate DART tools; korean-dart remains the authoritative disclosure source.",
   "Do not edit the user's source note automatically.",
-  "Write Korean disclosure research notes, not investment advice or trading recommendations.",
+  "Write Korean disclosure and market-data research notes, not investment advice or trading recommendations.",
 ].join("\n");
 
 export function resolveAppServerPermission(mode: CodexPermissionMode | undefined): CodexAppServerPermissionConfig {
@@ -460,13 +484,20 @@ export function resolveMcpElicitationRequest(params: unknown): {
   const hasNoRequestedFields = !properties
     || (typeof properties === "object" && !Array.isArray(properties) && Object.keys(properties).length === 0);
 
-  if (serverName === "korean-dart" && approvalKind === "mcp_tool_call" && hasNoRequestedFields) {
-    const toolName = extractMcpToolName(payload);
+  const toolName = extractMcpToolName(payload);
+  const isApprovedKoreaStockTool = serverName === "korea-stock"
+    && (toolName === "get_stock_base_info" || toolName === "get_stock_trade_info");
+
+  if (
+    approvalKind === "mcp_tool_call"
+    && hasNoRequestedFields
+    && (serverName === "korean-dart" || isApprovedKoreaStockTool)
+  ) {
     return {
       result: { action: "accept", content: {}, _meta: null },
       progress: toolName
-        ? `korean-dart/${toolName} 실행 승인`
-        : "korean-dart MCP 도구 실행 승인",
+        ? `${serverName}/${toolName} 실행 승인`
+        : `${serverName} MCP 도구 실행 승인`,
     };
   }
 

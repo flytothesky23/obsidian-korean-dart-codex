@@ -23,7 +23,7 @@ describe("DART research prompt", () => {
     expect(prompt).toContain("resolve_corp_code");
     expect(prompt).toContain("Discover the current tool inventory");
     expect(prompt).toContain("Do not execute shell commands, Python, Node, or local file commands");
-    expect(prompt).toContain("include only completed `korean-dart` MCP calls");
+    expect(prompt).toContain("include only completed `korean-dart` or approved `korea-stock` MCP calls");
     expect(prompt).toContain("not investment advice or a recommendation to trade");
     expect(prompt).toContain("Start every heading on its own line");
     expect(prompt).toContain("valid Markdown table");
@@ -35,6 +35,22 @@ describe("DART research prompt", () => {
     expect(prompt).toContain('"corp_codes": []');
     expect(prompt).toContain('"receipt_numbers": []');
     expect(prompt).toContain("삼성전자 최근 3년 주요 공시와 재무 리스크를 정리해줘");
+  });
+
+  it("routes KRX mode to the two approved daily-data tools without duplicating DART", () => {
+    const prompt = buildDartResearchPrompt({
+      query: "삼성전자 최근 5거래일 종가와 거래량을 비교해줘",
+      researchMode: "krx",
+    });
+
+    expect(prompt).toContain("selected research priority is KRX market data");
+    expect(prompt).toContain("get_stock_base_info and get_stock_trade_info");
+    expect(prompt).toContain("official daily market records, not real-time quotes");
+    expect(prompt).toContain("confirmed historical market data, not a prediction or outlook");
+    expect(prompt).toContain("separate API-use approvals");
+    expect(prompt).toContain("Never call korea-stock DART tools");
+    expect(prompt).toContain('"research_mode": "krx"');
+    expect(prompt).toContain('"trading_dates": []');
   });
 
   it("keeps selected vault snapshots separate from official MCP sources", () => {

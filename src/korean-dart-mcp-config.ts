@@ -1,3 +1,5 @@
+import { managedMcpLauncherConfig } from "./managed-mcp-launcher";
+
 export type KoreanDartMcpSource = "managed" | "codex-config";
 
 export const KOREAN_DART_MCP_PACKAGE = "korean-dart-mcp@0.10.1";
@@ -10,10 +12,9 @@ export interface KoreanDartMcpLaunchConfig {
 }
 
 export function managedKoreanDartMcpConfig(): KoreanDartMcpLaunchConfig {
+  const launcher = managedMcpLauncherConfig(KOREAN_DART_MCP_PACKAGE, "korean-dart-mcp");
   return {
-    command: "npx",
-    args: ["-y", KOREAN_DART_MCP_PACKAGE],
-    cwd: null,
+    ...launcher,
     env: {},
   };
 }
@@ -24,13 +25,16 @@ export function applyKoreanDartMcpConfig(
 ): string[] {
   if (source !== "managed") return [...args];
 
+  const launcher = managedMcpLauncherConfig(KOREAN_DART_MCP_PACKAGE, "korean-dart-mcp");
   const overrides = [
     "--config",
-    'mcp_servers.korean-dart.command="npx"',
+    `mcp_servers.korean-dart.command=${JSON.stringify(launcher.command)}`,
     "--config",
-    `mcp_servers.korean-dart.args=["-y","${KOREAN_DART_MCP_PACKAGE}"]`,
+    `mcp_servers.korean-dart.args=${JSON.stringify(launcher.args)}`,
     "--config",
     'mcp_servers.korean-dart.env_vars=["DART_API_KEY"]',
+    "--config",
+    `mcp_servers.korean-dart.cwd=${JSON.stringify(launcher.cwd)}`,
   ];
 
   // The shared codexian wrapper detects exec only when it remains argv[0].

@@ -1,8 +1,9 @@
-import type { KoreanDartMcpStatus } from "./codex-mcp-status";
+import type { CodexMcpStatus } from "./codex-mcp-status";
+import { KOREA_STOCK_ENABLED_TOOLS } from "./korea-stock-mcp-config";
 
 export function renderMcpStatusButton(
   button: HTMLButtonElement,
-  status: KoreanDartMcpStatus,
+  status: CodexMcpStatus,
   setIcon: (element: HTMLElement, icon: string) => void,
 ): void {
   button.classList.remove("is-checking", "is-ready", "is-missing", "is-failed");
@@ -20,31 +21,59 @@ export function renderMcpStatusButton(
   button.append(icon, label);
 }
 
-export function mcpStatusLabel(status: KoreanDartMcpStatus): string {
+export function mcpStatusLabel(status: CodexMcpStatus): string {
   if (status.state === "ready") return `MCP ${status.version}`;
   if (status.state === "missing" && status.authStatus === "missing") return "API 키 필요";
   if (status.state === "missing") return "MCP 없음";
+  if (status.state === "failed" && status.authStatus === "rejected") return "API 승인 확인";
+  if (status.state === "failed" && status.authStatus === "api-error") return "API 오류";
   if (status.state === "failed") return "MCP 오류";
   return "MCP 확인 중";
 }
 
-export function mcpStatusTooltip(status: KoreanDartMcpStatus): string {
+export function mcpStatusTooltip(status: CodexMcpStatus): string {
+  const displayName = mcpDisplayName(status);
   if (status.state === "ready") {
+    const toolDetail = isKoreaStockStatus(status)
+      ? `${KOREA_STOCK_ENABLED_TOOLS.length}개 허용 도구 · 서버 전체 ${status.toolCount}개`
+      : `${status.toolCount}개 도구`;
     return [
-      `korean-dart MCP ${status.version} 연결됨`,
-      `${status.toolCount}개 공개 도구`,
+      `${displayName} MCP ${status.version} 연결됨`,
+      status.authStatus === "verified" ? "공식 API 실조회 확인됨" : "API 키 존재 확인됨",
+      toolDetail,
       status.source === "managed" ? "플러그인 자동 관리" : "Codex 등록 설정 사용",
     ].filter(Boolean).join(" · ");
   }
-  if (status.state === "missing") return status.error || "Codex MCP 설정에서 korean-dart 서버를 찾지 못했습니다.";
-  if (status.state === "failed") return status.error || "korean-dart MCP 연결을 확인해야 합니다.";
-  return "korean-dart MCP 연결 상태 확인 중";
+  if (status.state === "missing") return status.error || `Codex MCP 설정에서 ${mcpServerName(status)} 서버를 찾지 못했습니다.`;
+  if (status.state === "failed") return status.error || `${displayName} MCP 연결을 확인해야 합니다.`;
+  return `${displayName} MCP 연결 상태 확인 중`;
 }
 
-export function mcpWelcomeLabel(status: KoreanDartMcpStatus): string {
-  if (status.state === "ready") return `korean-dart MCP ${status.version} 연결됨`;
-  if (status.state === "missing" && status.authStatus === "missing") return "OpenDART API 키 필요";
-  if (status.state === "missing") return "korean-dart MCP 설정 필요";
-  if (status.state === "failed") return "korean-dart MCP 확인 필요";
-  return "korean-dart MCP 확인 중";
+export function mcpWelcomeLabel(status: CodexMcpStatus): string {
+  const displayName = mcpDisplayName(status);
+  if (status.state === "ready") return `${displayName} MCP ${status.version} 연결됨`;
+  if (status.state === "missing" && status.authStatus === "missing") return `${mcpAuthLabel(status)} 필요`;
+  if (status.state === "missing") return `${displayName} MCP 설정 필요`;
+  if (status.state === "failed" && status.authStatus === "api-error") return `${displayName} 공식 API 확인 필요`;
+  if (status.state === "failed") return `${displayName} MCP 확인 필요`;
+  return `${displayName} MCP 확인 중`;
+}
+
+function mcpDisplayName(status: CodexMcpStatus): string {
+  if (isKoreaStockStatus(status)) return "KRX";
+  return "korean-dart";
+}
+
+function mcpServerName(status: CodexMcpStatus): string {
+  if (status.serverId) return status.serverId;
+  return status.name || "korean-dart";
+}
+
+function mcpAuthLabel(status: CodexMcpStatus): string {
+  if (isKoreaStockStatus(status)) return "KRX API 키";
+  return "OpenDART API 키";
+}
+
+function isKoreaStockStatus(status: CodexMcpStatus): boolean {
+  return status.serverId === "korea-stock" || status.name === "korea-stock" || status.name === "korea-stock-mcp";
 }

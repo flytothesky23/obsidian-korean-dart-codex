@@ -6,6 +6,12 @@ export function summarizeCodexStderr(text: string): string {
   if (isNodeMissing(stripped)) {
     return "Node.js 경로 확인 필요";
   }
+  if (isKrxApiKeyMissing(stripped)) {
+    return "KRX API 키(KRX_API_KEY) 확인 필요";
+  }
+  if (isKrxApiAuthFailure(stripped)) {
+    return "KRX 인증키·서비스 승인 확인 필요";
+  }
   if (isDartApiKeyMissing(stripped)) {
     return "OpenDART API 키(DART_API_KEY) 확인 필요";
   }
@@ -29,6 +35,12 @@ export function summarizeFailureMessage(text: string): string {
   if (!stripped) return "실패";
   if (isNodeMissing(stripped)) {
     return "Node.js 경로를 찾지 못했습니다. Codex CLI path와 Node 설치를 확인하세요.";
+  }
+  if (isKrxApiKeyMissing(stripped)) {
+    return "KRX API 키(KRX_API_KEY)가 필요합니다.";
+  }
+  if (isKrxApiAuthFailure(stripped)) {
+    return "KRX가 요청을 401로 거부했습니다. 인증키와 해당 주식 API 서비스 이용 승인을 확인하세요.";
   }
   if (isDartApiKeyMissing(stripped)) {
     return "OpenDART API 키(DART_API_KEY)가 필요합니다.";
@@ -66,7 +78,8 @@ function stripAnsi(text: string): string {
 function redactSensitiveLog(text: string): string {
   return text
     .replace(/(www_authenticate_header:\s*")Bearer[^"]*(")/gi, '$1Bearer [redacted]$2')
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]");
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]")
+    .replace(/\b(DART_API_KEY|KRX_API_KEY)\s*=\s*[^\s,;]+/gi, "$1=[redacted]");
 }
 
 function isNodeMissing(text: string): boolean {
@@ -74,18 +87,27 @@ function isNodeMissing(text: string): boolean {
 }
 
 function isDartApiKeyMissing(text: string): boolean {
-  return /\bDART_API_KEY\b|OpenDART\s*(?:key|키|인증)|API\s*키|사용자\s*정보\s*검증\s*실패/i.test(text);
+  return /\bDART_API_KEY\b|OpenDART\s*(?:key|키|인증)|사용자\s*정보\s*검증\s*실패/i.test(text);
+}
+
+function isKrxApiKeyMissing(text: string): boolean {
+  return /\bKRX_API_KEY\b|There is no KRX API KEY|KRX\s*(?:key|키|인증)/i.test(text);
+}
+
+function isKrxApiAuthFailure(text: string): boolean {
+  return /(?:KRX|korea-stock)[\s\S]{0,160}(?:401|Unauthorized)|(?:401|Unauthorized)[\s\S]{0,160}(?:KRX|korea-stock)/i.test(text);
 }
 
 function formatKoreanDartMcpActivity(text: string): string {
-  const match = text.match(/\bmcp:\s*korean-dart\/([A-Za-z0-9_-]+)\s*(?:(?:\((started|completed|failed)\))|(started|completed|failed))?/i);
+  const match = text.match(/\bmcp:\s*(korean-dart|korea-stock)\/([A-Za-z0-9_-]+)\s*(?:(?:\((started|completed|failed)\))|(started|completed|failed))?/i);
   if (!match) return "";
-  const tool = match[1];
-  const state = (match[2] || match[3])?.toLowerCase();
-  if (state === "started") return `korean-dart/${tool} 호출 중`;
-  if (state === "completed") return `korean-dart/${tool} 완료`;
-  if (state === "failed") return `korean-dart/${tool} 응답 없음 - 다른 조회 경로 확인 중`;
-  return `korean-dart/${tool} 로그 수신`;
+  const server = match[1];
+  const tool = match[2];
+  const state = (match[3] || match[4])?.toLowerCase();
+  if (state === "started") return `${server}/${tool} 호출 중`;
+  if (state === "completed") return `${server}/${tool} 완료`;
+  if (state === "failed") return `${server}/${tool} 응답 없음 - 다른 조회 경로 확인 중`;
+  return `${server}/${tool} 로그 수신`;
 }
 
 function isNoisyCodexLog(text: string): boolean {

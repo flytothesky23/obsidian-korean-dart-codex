@@ -1,4 +1,5 @@
 import type { ContextSnapshot } from "./dart-context";
+import { normalizeResearchMode, type ResearchMode } from "./research-mode";
 
 export interface PanelMessage {
   role: "user" | "assistant";
@@ -13,6 +14,7 @@ export interface DartPromptOptions {
   history?: PanelMessage[];
   vaultContext?: ContextSnapshot | null;
   includeActiveNoteContext?: boolean;
+  researchMode?: ResearchMode;
 }
 
 export type DartVisualMode =
@@ -46,9 +48,26 @@ interface DartVisualGenreProfile {
 export function buildDartResearchPrompt(options: DartPromptOptions): string {
   const history = (options.history ?? []).slice(-6);
   const hasExplicitContext = !!options.vaultContext?.notes.length;
+  const researchMode = normalizeResearchMode(options.researchMode);
+  const domainInstructions = researchMode === "krx"
+    ? [
+      "The selected research priority is KRX market data.",
+      "Use the `korea-stock` MCP server only for get_stock_base_info and get_stock_trade_info.",
+      "KRX payloads are official daily market records, not real-time quotes or order-book data. State every requested and returned trading date (기준일) explicitly.",
+      "A completed prior trading day's closing price and volume are confirmed historical market data, not a prediction or outlook. Describe them as 장 마감 확정 데이터. Only the current trading day may be incomplete or unavailable before KRX publishes the daily record.",
+      "If KRX returns 401 Unauthorized, say that the MCP started and forwarded a credential but KRX rejected the API request. Ask the user to verify the issued key and the separate API-use approvals for the requested KOSPI/KOSDAQ/KONEX base or trade endpoint; do not label it as an MCP connection failure.",
+      "Use `korean-dart` to resolve companies, stock codes, market classification, disclosures, and financial facts when those are needed.",
+      "Never call korea-stock DART tools such as get_corp_code, get_disclosure_list, get_disclosure, get_financial_statement, or get_market_type.",
+      "For cross-source questions, keep KRX price/volume/market-cap records separate from DART filing facts and identify each source.",
+    ]
+    : [
+      "The selected research priority is DART disclosures.",
+      "Use the `korean-dart` MCP server first for Korean public-disclosure and finance research (공시 검색, 기업 개황, 재무자료, XBRL/첨부문서 요약).",
+      "Use korea-stock only when the user explicitly needs KRX daily base/trade records, and only through get_stock_base_info or get_stock_trade_info.",
+    ];
   return [
     "You are Korean DART Codex running inside an Obsidian vault.",
-    "Use the `korean-dart` MCP server first for Korean public-disclosure and finance research (공시 검색, 기업 개황, 재무자료, XBRL/첨부문서 요약).",
+    ...domainInstructions,
     "Prefer direct exposed `korean-dart` MCP tools such as resolve_corp_code, search_disclosures, get_company, get_financials, get_xbrl, get_periodic_report, get_attachments, insider_signal, disclosure_anomaly, and buffett_quality_snapshot.",
     "Discover the current tool inventory instead of assuming a fixed tool count or version.",
     "Do not execute shell commands, Python, Node, or local file commands. Use `korean-dart` MCP tools for disclosure lookup and normal reasoning for synthesis.",
@@ -63,7 +82,7 @@ export function buildDartResearchPrompt(options: DartPromptOptions): string {
     "Write in Korean. Treat this as disclosure research and note organization, not investment advice or a recommendation to trade.",
     "Separate disclosure sources, calculations, risk factors, and uncertainty clearly.",
     "If a fact is not confirmed by the MCP result, say it is unconfirmed.",
-    "In tools_used, include only completed `korean-dart` MCP calls. Do not include failed, cancelled, or unrelated MCP calls.",
+    "In tools_used, include only completed `korean-dart` or approved `korea-stock` MCP calls. Do not include failed, cancelled, duplicate-DART, or unrelated MCP calls.",
     "Return reader-ready Markdown, not a dense text dump.",
     "Start every heading on its own line, with a blank line before and after it. Use ## for major sections and ### for subordinate sections.",
     "Use one continuous ordered list for parallel or sequential points. Keep nested ordered and unordered evidence indented beneath its parent item.",
@@ -78,9 +97,12 @@ export function buildDartResearchPrompt(options: DartPromptOptions): string {
     "<!-- korean-dart-codex-meta",
     "{",
     '  "query": "...",',
+    `  "research_mode": "${researchMode}",`,
+    '  "sources": [],',
     '  "company_names": [],',
     '  "corp_codes": [],',
     '  "receipt_numbers": [],',
+    '  "trading_dates": [],',
     '  "tools_used": [],',
     '  "generated_at": "ISO-8601",',
     '  "confidence": "low|medium|high"',
@@ -91,7 +113,7 @@ export function buildDartResearchPrompt(options: DartPromptOptions): string {
     formatActiveNoteContext(options, hasExplicitContext),
     history.length ? `Recent chat history:\n${formatHistory(history)}` : "",
     "",
-    `User disclosure research question:\n${options.query.trim()}`,
+    `User ${researchMode === "krx" ? "KRX market-data" : "disclosure"} research question:\n${options.query.trim()}`,
   ].filter(Boolean).join("\n");
 }
 

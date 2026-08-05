@@ -7,6 +7,11 @@ import {
   applyKoreanDartMcpConfig,
   type KoreanDartMcpSource,
 } from "./korean-dart-mcp-config";
+import {
+  applyKoreaStockMcpConfig,
+  type KoreaStockMcpSource,
+} from "./korea-stock-mcp-config";
+import { shouldCreateProcessGroup, terminateProcessTree } from "./process-tree";
 
 export interface CodexCliResult {
   stdout: string;
@@ -174,6 +179,7 @@ export async function runCodexExec(params: {
   permissionMode?: CodexPermissionMode;
   environmentVariables?: string;
   koreanDartMcpSource?: KoreanDartMcpSource;
+  koreaStockMcpSource?: KoreaStockMcpSource;
   timeoutMs: number;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
@@ -191,19 +197,23 @@ export async function runCodexExec(params: {
       `korean-dart-codex-last-message-${Date.now()}-${Math.random().toString(36).slice(2)}.md`,
     );
     const env = buildCodexEnvironment(params.environmentVariables, command, { cwd: params.cwd });
-    const args = applyKoreanDartMcpConfig(codexExecArgs({
-      model: params.model,
-      reasoningEffort: params.reasoningEffort,
-      permissionMode: params.permissionMode,
-      cwd: params.cwd,
-      outputLastMessagePath,
-    }), params.koreanDartMcpSource);
+    const args = applyKoreaStockMcpConfig(
+      applyKoreanDartMcpConfig(codexExecArgs({
+        model: params.model,
+        reasoningEffort: params.reasoningEffort,
+        permissionMode: params.permissionMode,
+        cwd: params.cwd,
+        outputLastMessagePath,
+      }), params.koreanDartMcpSource),
+      params.koreaStockMcpSource,
+    );
     const spawnPlan = createCodexSpawnPlan(command, args);
     const child = spawn(spawnPlan.command, spawnPlan.args, {
       cwd: params.cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env,
       shell: spawnPlan.shell,
+      detached: shouldCreateProcessGroup(),
       windowsHide: true,
     });
 
@@ -218,16 +228,18 @@ export async function runCodexExec(params: {
     const abort = () => {
       if (settled) return;
       settled = true;
-      child.kill("SIGTERM");
-      cleanup();
-      reject(new Error("Codex CLI request cancelled."));
+      void terminateProcessTree(child).finally(() => {
+        cleanup();
+        reject(new Error("Codex CLI request cancelled."));
+      });
     };
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill("SIGTERM");
-      cleanup();
-      reject(new Error(`Codex CLI timed out after ${Math.round(params.timeoutMs / 1000)} seconds.`));
+      void terminateProcessTree(child).finally(() => {
+        cleanup();
+        reject(new Error(`Codex CLI timed out after ${Math.round(params.timeoutMs / 1000)} seconds.`));
+      });
     }, params.timeoutMs);
     params.signal?.addEventListener("abort", abort, { once: true });
 

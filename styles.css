@@ -91,6 +91,7 @@
 .korean-dart-codex-icon-button,
 .korean-dart-codex-model-chip,
 .korean-dart-codex-mcp-status,
+.korean-dart-codex-source-tab,
 .korean-dart-codex-action,
 .korean-dart-codex-small-button,
 .korean-dart-codex-tiny-button,
@@ -201,6 +202,49 @@
   gap: 3px;
   position: relative;
   z-index: 1;
+}
+
+.korean-dart-codex-source-tabs {
+  align-items: center;
+  background: color-mix(in srgb, var(--background-modifier-hover) 74%, transparent);
+  border: 1px solid var(--klc-border);
+  border-radius: 7px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 1px;
+  height: 23px;
+  padding: 2px;
+}
+
+.korean-dart-codex-source-tab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-faint);
+  display: inline-flex;
+  font-size: 8px;
+  font-weight: 760;
+  height: 17px;
+  justify-content: center;
+  letter-spacing: 0.045em;
+  min-width: 30px;
+  padding: 0 5px;
+}
+
+.korean-dart-codex-source-tab:hover:not(:disabled) {
+  color: var(--text-normal);
+}
+
+.korean-dart-codex-source-tab.is-active {
+  background: var(--background-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--background-modifier-box-shadow) 42%, transparent);
+  color: var(--klc-accent-strong);
+}
+
+.korean-dart-codex-source-tab:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 32%, transparent);
+  outline: none;
 }
 
 .korean-dart-codex-tiny-button {
@@ -1344,6 +1388,23 @@
     max-width: 98px;
   }
 
+  .korean-dart-codex-status {
+    gap: 4px;
+  }
+
+  .korean-dart-codex-status-text {
+    font-size: 10px;
+  }
+
+  .korean-dart-codex-source-tab {
+    min-width: 27px;
+    padding-inline: 3px;
+  }
+
+  .korean-dart-codex-mcp-status {
+    max-width: 64px;
+  }
+
   .korean-dart-codex-action,
   .korean-dart-codex-send {
     height: 27px;
@@ -1367,6 +1428,7 @@
   .korean-dart-codex-context-button,
   .korean-dart-codex-model-chip,
   .korean-dart-codex-mcp-status,
+  .korean-dart-codex-source-tab,
   .korean-dart-codex-action,
   .korean-dart-codex-small-button,
   .korean-dart-codex-tiny-button,

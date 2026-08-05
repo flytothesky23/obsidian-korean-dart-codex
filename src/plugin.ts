@@ -97,9 +97,12 @@ import {
 } from "./message-copy";
 import { StableStreamingMessage } from "./streaming-message";
 import {
+  discoverKoreaStockMcpStatus,
   discoverKoreanDartMcpStatus,
+  INITIAL_KOREA_STOCK_MCP_STATUS,
   INITIAL_KOREAN_DART_MCP_STATUS,
   summarizeMcpStatusError,
+  type CodexMcpStatus,
   type KoreanDartMcpStatus,
 } from "./codex-mcp-status";
 import {
@@ -112,9 +115,21 @@ import {
   mergeDartApiKey,
   prepareDartRuntimeForPersistence,
 } from "./korean-dart-mcp-config";
+import {
+  extractKrxApiKey,
+  mergeKrxApiKey,
+  prepareKrxRuntimeForPersistence,
+} from "./korea-stock-mcp-config";
+import {
+  normalizeResearchMode,
+  researchModePresentation,
+  type ResearchMode,
+} from "./research-mode";
+import { renderResearchModeTabs } from "./research-mode-ui";
 
 const VIEW_TYPE = "korean-dart-codex-panel";
 const DART_API_KEY_SECRET_ID = "korean-dart-codex-api-key";
+const KRX_API_KEY_SECRET_ID = "korean-dart-codex-krx-api-key";
 
 const REASONING_OPTIONS: Array<[CodexReasoningEffort, string]> = [
   ["low", "Low"],
@@ -151,10 +166,14 @@ export default class KoreanDartCodexPlugin extends Plugin {
   private koreanDartMcpStatus: KoreanDartMcpStatus = { ...INITIAL_KOREAN_DART_MCP_STATUS };
   private koreanDartMcpStatusPromise: Promise<KoreanDartMcpStatus> | null = null;
   private koreanDartMcpStatusFetchedAt = 0;
+  private koreaStockMcpStatus: CodexMcpStatus = { ...INITIAL_KOREA_STOCK_MCP_STATUS };
+  private koreaStockMcpStatusPromise: Promise<CodexMcpStatus> | null = null;
+  private koreaStockMcpStatusFetchedAt = 0;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     await this.migrateLegacyDartApiKey();
+    await this.migrateLegacyKrxApiKey();
     this.contextApi = Object.freeze({
       version: 2 as const,
       search: async (query: string, options?: VaultSearchOptions) => {
@@ -230,6 +249,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const loaded = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    this.settings.researchMode = normalizeResearchMode(this.settings.researchMode);
   }
 
   async saveSettings(): Promise<void> {
@@ -244,10 +264,26 @@ export default class KoreanDartCodexPlugin extends Plugin {
     this.app.secretStorage.setSecret(DART_API_KEY_SECRET_ID, value.trim());
   }
 
+  getKrxApiKey(): string {
+    return this.app.secretStorage.getSecret(KRX_API_KEY_SECRET_ID) ?? "";
+  }
+
+  setKrxApiKey(value: string): void {
+    this.app.secretStorage.setSecret(KRX_API_KEY_SECRET_ID, value.trim());
+  }
+
   private async migrateLegacyDartApiKey(): Promise<void> {
     const extracted = extractDartApiKey(this.settings.environmentVariables);
     if (!extracted.dartApiKey) return;
     if (!this.getDartApiKey()) this.setDartApiKey(extracted.dartApiKey);
+    this.settings.environmentVariables = extracted.environmentVariables;
+    await this.saveSettings();
+  }
+
+  private async migrateLegacyKrxApiKey(): Promise<void> {
+    const extracted = extractKrxApiKey(this.settings.environmentVariables);
+    if (!extracted.krxApiKey) return;
+    if (!this.getKrxApiKey()) this.setKrxApiKey(extracted.krxApiKey);
     this.settings.environmentVariables = extracted.environmentVariables;
     await this.saveSettings();
   }
@@ -324,6 +360,43 @@ export default class KoreanDartCodexPlugin extends Plugin {
     this.koreanDartMcpStatus = { ...INITIAL_KOREAN_DART_MCP_STATUS };
   }
 
+  getKoreaStockMcpStatus(): CodexMcpStatus {
+    return { ...this.koreaStockMcpStatus };
+  }
+
+  async refreshKoreaStockMcpStatus(force = false): Promise<CodexMcpStatus> {
+    if (this.koreaStockMcpStatusPromise) return this.koreaStockMcpStatusPromise;
+    if (!force && this.koreaStockMcpStatusFetchedAt > 0 && Date.now() - this.koreaStockMcpStatusFetchedAt < 300_000) {
+      return this.getKoreaStockMcpStatus();
+    }
+
+    this.koreaStockMcpStatus = { ...INITIAL_KOREA_STOCK_MCP_STATUS };
+    const runtime = this.getRuntime();
+    this.koreaStockMcpStatusPromise = discoverKoreaStockMcpStatus({
+      runtime,
+      cwd: this.getVaultPath(),
+      timeoutMs: this.settings.codexAppServerTimeoutSeconds * 1000,
+      source: this.settings.koreaStockMcpSource,
+    }).catch((error) => ({
+      ...INITIAL_KOREA_STOCK_MCP_STATUS,
+      state: "failed" as const,
+      checkedAt: Date.now(),
+      error: summarizeMcpStatusError(error),
+    })).then((status) => {
+      this.koreaStockMcpStatus = status;
+      this.koreaStockMcpStatusFetchedAt = Date.now();
+      return this.getKoreaStockMcpStatus();
+    }).finally(() => {
+      this.koreaStockMcpStatusPromise = null;
+    });
+    return this.koreaStockMcpStatusPromise;
+  }
+
+  invalidateKoreaStockMcpStatus(): void {
+    this.koreaStockMcpStatusFetchedAt = 0;
+    this.koreaStockMcpStatus = { ...INITIAL_KOREA_STOCK_MCP_STATUS };
+  }
+
   async openPanel(showNotice = true): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
     if (existing) {
@@ -349,11 +422,15 @@ export default class KoreanDartCodexPlugin extends Plugin {
       return {
         ...codexianRuntime,
         permissionMode: mcpCapablePermissionMode(codexianRuntime.permissionMode),
-        environmentVariables: mergeDartApiKey(
-          codexianRuntime.environmentVariables,
-          this.getDartApiKey(),
+        environmentVariables: mergeKrxApiKey(
+          mergeDartApiKey(
+            codexianRuntime.environmentVariables,
+            this.getDartApiKey(),
+          ),
+          this.getKrxApiKey(),
         ),
         koreanDartMcpSource: this.settings.koreanDartMcpSource,
+        koreaStockMcpSource: this.settings.koreaStockMcpSource,
       };
     }
     return {
@@ -362,11 +439,15 @@ export default class KoreanDartCodexPlugin extends Plugin {
       model: this.settings.codexModel,
       reasoningEffort: this.settings.reasoningEffort,
       permissionMode: this.settings.permissionMode,
-      environmentVariables: mergeDartApiKey(
-        this.settings.environmentVariables,
-        this.getDartApiKey(),
+      environmentVariables: mergeKrxApiKey(
+        mergeDartApiKey(
+          this.settings.environmentVariables,
+          this.getDartApiKey(),
+        ),
+        this.getKrxApiKey(),
       ),
       koreanDartMcpSource: this.settings.koreanDartMcpSource,
+      koreaStockMcpSource: this.settings.koreaStockMcpSource,
     };
   }
 
@@ -398,6 +479,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
     onEvent: (event: DartAgentEvent) => void,
     vaultContext?: ContextSnapshot | null,
     includeActiveNoteContext = true,
+    researchMode: ResearchMode = this.settings.researchMode,
   ): Promise<string> {
     const runtime = this.getRuntime();
     const context = includeActiveNoteContext ? await this.getActiveNoteContext() : {};
@@ -409,6 +491,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
       history,
       vaultContext,
       includeActiveNoteContext,
+      researchMode,
     });
 
     let answer = "";
@@ -427,6 +510,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
       appServerFallback: this.settings.appServerFallback,
       persistSession: this.settings.persistSession,
       koreanDartMcpSource: runtime.koreanDartMcpSource,
+      koreaStockMcpSource: runtime.koreaStockMcpSource,
     })) {
       onEvent(event);
       if (event.type === "text-delta") answer += event.content;
@@ -454,6 +538,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
       permissionMode: runtime.permissionMode,
       environmentVariables: runtime.environmentVariables,
       koreanDartMcpSource: runtime.koreanDartMcpSource,
+      koreaStockMcpSource: runtime.koreaStockMcpSource,
       timeoutMs: this.settings.timeoutSeconds * 1000,
       onStdout: (chunk) => onChunk(chunk, "stdout"),
       onStderr: (chunk) => onChunk(chunk, "stderr"),
@@ -465,6 +550,7 @@ export default class KoreanDartCodexPlugin extends Plugin {
     query: string,
     response: string,
     contextSnapshot?: ContextSnapshot | null,
+    researchMode: ResearchMode = this.settings.researchMode,
   ): Promise<string> {
     const folder = normalizeVaultPath(this.settings.outputFolder || DEFAULT_SETTINGS.outputFolder);
     await ensureFolder(this.app.vault.adapter, folder);
@@ -473,10 +559,11 @@ export default class KoreanDartCodexPlugin extends Plugin {
       response,
       outputFolder: folder,
       contextSnapshot,
+      researchMode,
     });
     const path = await uniqueVaultPath(
       this.app.vault.adapter,
-      buildResearchNotePath(query, folder),
+      buildResearchNotePath(query, folder, new Date(), researchMode),
     );
     await this.app.vault.create(path, note);
     await this.openVaultPath(path);
@@ -627,6 +714,10 @@ export default class KoreanDartCodexPlugin extends Plugin {
 
   resetDartSession(): void {
     this.dartProvider.resetSession();
+  }
+
+  restartDartRuntime(): void {
+    this.dartProvider.shutdown();
   }
 
   getDartSessionId(): string | null {
@@ -906,6 +997,7 @@ class KoreanDartCodexPanelView extends ItemView {
   private isRunning = false;
   private lastResearchAnswer = "";
   private lastResearchQuery = "";
+  private lastResearchMode: ResearchMode = "dart";
   private lastSavedPath = "";
   private activityLines: string[] = [];
   private diagnosticLines: string[] = [];
@@ -926,6 +1018,7 @@ class KoreanDartCodexPanelView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private plugin: KoreanDartCodexPlugin) {
     super(leaf);
+    this.lastResearchMode = plugin.settings.researchMode;
   }
 
   getViewType(): string {
@@ -942,7 +1035,10 @@ class KoreanDartCodexPanelView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.scheduleRender();
-    void this.plugin.refreshKoreanDartMcpStatus().then(() => this.scheduleRender());
+    void Promise.all([
+      this.plugin.refreshKoreanDartMcpStatus(),
+      this.plugin.refreshKoreaStockMcpStatus(),
+    ]).then(() => this.scheduleRender());
   }
 
   async onClose(): Promise<void> {
@@ -1026,6 +1122,7 @@ class KoreanDartCodexPanelView extends ItemView {
   }
 
   private renderHeader(root: HTMLElement): void {
+    const presentation = researchModePresentation(this.plugin.settings.researchMode);
     const header = root.createDiv({ cls: "korean-dart-codex-header" });
     const brand = header.createDiv({ cls: "korean-dart-codex-brand" });
     const logo = brand.createDiv({ cls: "korean-dart-codex-logo" });
@@ -1034,7 +1131,7 @@ class KoreanDartCodexPanelView extends ItemView {
     title.createEl("h2", { text: "Korean DART Codex" });
     title.createDiv({
       cls: "korean-dart-codex-subtitle",
-      text: "DART RESEARCH WORKSPACE",
+      text: presentation.subtitle,
     });
 
     const actions = header.createDiv({ cls: "korean-dart-codex-header-actions" });
@@ -1069,28 +1166,52 @@ class KoreanDartCodexPanelView extends ItemView {
     if (this.phase === "failed" && this.lastFailedQuery) {
       this.addTinyButton(controls, "재시도", "refresh-cw", () => void this.retryLast());
     }
+    renderResearchModeTabs(
+      controls,
+      this.plugin.settings.researchMode,
+      this.isRunning,
+      (mode) => void this.selectResearchMode(mode),
+    );
     this.renderMcpStatusControl(controls);
     this.addTinyButton(controls, "로그", "clipboard-list", () => void this.copyLogs(), this.diagnosticLines.length === 0);
   }
 
   private renderMcpStatusControl(parent: HTMLElement): void {
-    const status = this.plugin.getKoreanDartMcpStatus();
+    const mode = this.plugin.settings.researchMode;
+    const status = mode === "krx"
+      ? this.plugin.getKoreaStockMcpStatus()
+      : this.plugin.getKoreanDartMcpStatus();
     const button = parent.createEl("button", {
       cls: `korean-dart-codex-tiny-button korean-dart-codex-mcp-status is-${status.state}`,
     });
     button.disabled = this.isRunning || status.state === "checking";
     renderMcpStatusButton(button, status, setIcon);
     button.addEventListener("click", () => {
-      this.statusText = "korean-dart MCP 상태 다시 확인 중";
+      const serverName = researchModePresentation(mode).statusLabel;
+      this.statusText = `${serverName} MCP 상태 다시 확인 중`;
       this.phase = "preparing";
-      this.plugin.invalidateKoreanDartMcpStatus();
+      if (mode === "krx") this.plugin.invalidateKoreaStockMcpStatus();
+      else this.plugin.invalidateKoreanDartMcpStatus();
       this.render();
-      void this.plugin.refreshKoreanDartMcpStatus(true).then((next) => {
+      const refresh = mode === "krx"
+        ? this.plugin.refreshKoreaStockMcpStatus(true)
+        : this.plugin.refreshKoreanDartMcpStatus(true);
+      void refresh.then((next) => {
         this.phase = next.state === "ready" ? "complete" : "idle";
         this.statusText = mcpStatusTooltip(next);
         this.render();
       });
     });
+  }
+
+  private async selectResearchMode(mode: ResearchMode): Promise<void> {
+    if (this.isRunning || mode === this.plugin.settings.researchMode) return;
+    this.plugin.settings.researchMode = mode;
+    await this.plugin.saveSettings();
+    this.plugin.resetDartSession();
+    this.phase = "idle";
+    this.statusText = `${researchModePresentation(mode).label} 리서치 우선 모드`;
+    this.render();
   }
 
   private openModelMenu(event: MouseEvent): void {
@@ -1166,7 +1287,14 @@ class KoreanDartCodexPanelView extends ItemView {
     if (persisted.dartApiKeyToStore) {
       this.plugin.setDartApiKey(persisted.dartApiKeyToStore);
     }
-    this.plugin.settings.environmentVariables = persisted.environmentVariables;
+    const krxPersisted = prepareKrxRuntimeForPersistence(
+      persisted.environmentVariables,
+      this.plugin.getKrxApiKey(),
+    );
+    if (krxPersisted.krxApiKeyToStore) {
+      this.plugin.setKrxApiKey(krxPersisted.krxApiKeyToStore);
+    }
+    this.plugin.settings.environmentVariables = krxPersisted.environmentVariables;
   }
 
   private async saveRuntimeChoice(source: "codexian" | "custom", message: string): Promise<void> {
@@ -1174,13 +1302,17 @@ class KoreanDartCodexPanelView extends ItemView {
     await this.plugin.saveSettings();
     this.plugin.invalidateModelCatalog();
     this.plugin.invalidateKoreanDartMcpStatus();
-    this.plugin.resetDartSession();
+    this.plugin.invalidateKoreaStockMcpStatus();
+    this.plugin.restartDartRuntime();
     this.plugin.shutdownVisualProvider();
     this.phase = "complete";
     this.statusText = message;
     this.pushActivity(message);
     this.render();
-    void this.plugin.refreshKoreanDartMcpStatus(true).then(() => this.scheduleRender());
+    void Promise.all([
+      this.plugin.refreshKoreanDartMcpStatus(true),
+      this.plugin.refreshKoreaStockMcpStatus(true),
+    ]).then(() => this.scheduleRender());
   }
 
   private resetConversation(): void {
@@ -1191,6 +1323,7 @@ class KoreanDartCodexPanelView extends ItemView {
     this.phase = "idle";
     this.lastResearchAnswer = "";
     this.lastResearchQuery = "";
+    this.lastResearchMode = this.plugin.settings.researchMode;
     this.lastSavedPath = "";
     this.activityLines = [];
     this.diagnosticLines = [];
@@ -1204,6 +1337,7 @@ class KoreanDartCodexPanelView extends ItemView {
   }
 
   private renderChat(root: HTMLElement, shouldScroll: boolean): void {
+    const presentation = researchModePresentation(this.plugin.settings.researchMode);
     const chat = root.createDiv({ cls: "korean-dart-codex-chat" });
     this.chatEl = chat;
     if (this.messages.length === 0) {
@@ -1214,15 +1348,19 @@ class KoreanDartCodexPanelView extends ItemView {
       markWrap.createDiv({ cls: "klc-chart-ripple klc-chart-ripple-b" });
       const mark = markWrap.createDiv({ cls: "klc-chart-mark" });
       mark.innerHTML = KOREAN_DART_CHART_SVG;
-      card.createDiv({ cls: "klc-welcome-kicker", text: "KOREAN DART CODEX" });
+      card.createDiv({ cls: "klc-welcome-kicker", text: `KOREAN ${presentation.label} CODEX` });
       card.createDiv({
         cls: "klc-welcome-maxim",
         text: "Let evidence speak; let judgment find its balance.",
       });
-      card.createDiv({ cls: "klc-welcome-title", text: "원문 공시에서 시작하는 기업 리서치" });
+      card.createDiv({ cls: "klc-welcome-title", text: presentation.welcomeTitle });
       card.createDiv({
         cls: "klc-welcome-subtitle",
-        text: `Codex app-server · ${mcpWelcomeLabel(this.plugin.getKoreanDartMcpStatus())}`,
+        text: `Codex app-server · ${mcpWelcomeLabel(
+          this.plugin.settings.researchMode === "krx"
+            ? this.plugin.getKoreaStockMcpStatus()
+            : this.plugin.getKoreanDartMcpStatus(),
+        )}`,
       });
     }
     for (const [index, message] of this.messages.entries()) {
@@ -1284,7 +1422,7 @@ class KoreanDartCodexPanelView extends ItemView {
     const composer = root.createDiv({ cls: "korean-dart-codex-composer" });
     this.renderContextChips(composer);
     const input = composer.createEl("textarea", { cls: "korean-dart-codex-input" });
-    input.placeholder = "예: 삼성전자 최근 3년 재무지표와 주요 공시 리스크를 정리해줘";
+    input.placeholder = researchModePresentation(this.plugin.settings.researchMode).placeholder;
     input.value = this.promptValue;
     input.disabled = this.isRunning;
     input.addEventListener("input", () => {
@@ -1412,8 +1550,8 @@ class KoreanDartCodexPanelView extends ItemView {
     if (!snapshot) {
       if (!noContextScope) return;
       this.statusText = noContextScope === "turn"
-        ? "이번 질문은 노트 없이 korean-dart MCP로 조사합니다."
-        : "현재 대화는 노트 없이 korean-dart MCP로 조사합니다.";
+        ? "이번 질문은 노트 없이 선택한 리서치 MCP로 조사합니다."
+        : "현재 대화는 노트 없이 선택한 리서치 MCP로 조사합니다.";
       this.phase = "complete";
       this.render();
       return;
@@ -1458,14 +1596,16 @@ class KoreanDartCodexPanelView extends ItemView {
       ? (contextOverride ?? null)
       : this.plugin.prepareTurnContext();
     const turnContext = includeActiveNoteContext ? preparedContext : null;
+    const researchMode = this.plugin.settings.researchMode;
     this.lastTurnContext = turnContext;
     this.lastTurnIncludedActiveNoteContext = includeActiveNoteContext;
+    this.lastResearchMode = researchMode;
     this.start("preparing", "질의 준비 중");
 
     try {
       const history = this.messages.slice(0, -2);
       this.phase = "searching";
-      this.statusText = "공시 근거와 재무 흐름을 확인하는 중...";
+      this.statusText = researchModePresentation(researchMode).searchingText;
       this.pushActivity(this.statusText);
       this.updateStatusDom();
       const answer = await this.plugin.runDartResearch(
@@ -1476,6 +1616,7 @@ class KoreanDartCodexPanelView extends ItemView {
         },
         turnContext,
         includeActiveNoteContext,
+        researchMode,
       );
       if (this.cancelRequested) {
         assistant.text = answer || "요청이 취소되었습니다.";
@@ -1531,10 +1672,11 @@ class KoreanDartCodexPanelView extends ItemView {
         this.lastResearchQuery,
         this.lastResearchAnswer,
         this.lastTurnContext,
+        this.lastResearchMode,
       );
       this.lastSavedPath = path;
-      this.finish("complete", "DART 공시 리서치 노트를 저장했습니다.");
-      new Notice(`Saved Korean DART research: ${path}`);
+      this.finish("complete", `${researchModePresentation(this.lastResearchMode).label} 리서치 노트를 저장했습니다.`);
+      new Notice(`Saved Korean market research: ${path}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.finish("failed", summarizeFailureMessage(message));
@@ -1593,6 +1735,7 @@ class KoreanDartCodexPanelView extends ItemView {
           this.lastResearchQuery,
           this.lastResearchAnswer,
           this.lastTurnContext,
+          this.lastResearchMode,
         );
         this.lastSavedPath = notePath;
       }
@@ -1812,10 +1955,11 @@ class KoreanDartCodexPanelView extends ItemView {
       this.statusText = summarizeCodexStderr(chunk);
     }
     if (!activity) return;
-    const visibleActivity = activity.startsWith("korean-dart/")
+    const isResearchMcpActivity = activity.startsWith("korean-dart/") || activity.startsWith("korea-stock/");
+    const visibleActivity = isResearchMcpActivity
       ? activity
       : "Codex runtime activity";
-    this.statusText = activity.startsWith("korean-dart/")
+    this.statusText = isResearchMcpActivity
       ? activity
       : this.statusText;
     this.pushActivity(visibleActivity);

@@ -1,7 +1,7 @@
 {
   "name": "obsidian-korean-dart-codex",
-  "version": "0.1.1",
-  "description": "Research Korean public disclosures through Codex CLI and korean-dart-mcp, then save source-backed notes in Obsidian.",
+  "version": "0.2.0",
+  "description": "Research Korean DART disclosures and KRX daily market data through Codex CLI, then save source-backed notes in Obsidian.",
   "main": "main.js",
   "scripts": {
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
@@ -26,7 +26,9 @@
     "korean-dart",
     "opendart",
     "corporate-disclosure",
-    "financial-research"
+    "financial-research",
+    "krx",
+    "market-data"
   ],
   "author": "flytothesky23",
   "license": "MIT",

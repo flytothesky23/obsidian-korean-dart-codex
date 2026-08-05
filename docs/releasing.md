@@ -30,12 +30,15 @@ git push origin main --tags
 ```
 
 GitHub Actions rebuilds the bundle and publishes the four BRAT assets. Never
-include `DART_API_KEY`, Codex tokens, `.env`, or local vault data in a release.
+include `DART_API_KEY`, `KRX_API_KEY`, Codex tokens, `.env`, or local vault data
+in a release.
 
 ## BRAT smoke test
 
 1. Add `https://github.com/flytothesky23/obsidian-korean-dart-codex` in BRAT.
 2. Confirm BRAT downloads all four release assets.
 3. Enable `Korean DART Codex`.
-4. Open the panel and verify the MCP status badge.
-5. Run one source-backed DART question and save the result note.
+4. Open the panel and verify the DART/KRX tabs and each MCP status badge.
+5. Run one source-backed DART question and one dated KRX market-data question.
+6. Save a KRX result and verify `research_mode`, `sources`,
+   `trading_dates`, and `tools_used` frontmatter.

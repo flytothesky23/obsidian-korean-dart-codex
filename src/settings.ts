@@ -5,6 +5,8 @@ import type { CodexPermissionMode, CodexReasoningEffort } from "./codexian-bridg
 import type { DartRuntimeMode } from "./codex-provider";
 import { FALLBACK_CODEX_MODELS, modelCatalogToOptions } from "./codex-model-catalog";
 import type { KoreanDartMcpSource } from "./korean-dart-mcp-config";
+import type { KoreaStockMcpSource } from "./korea-stock-mcp-config";
+import type { ResearchMode } from "./research-mode";
 
 export interface KoreanDartCodexSettings {
   outputFolder: string;
@@ -15,7 +17,9 @@ export interface KoreanDartCodexSettings {
   persistSession: boolean;
   codexAppServerTimeoutSeconds: number;
   codexSettingsSource: "codexian" | "custom";
+  researchMode: ResearchMode;
   koreanDartMcpSource: KoreanDartMcpSource;
+  koreaStockMcpSource: KoreaStockMcpSource;
   codexCommand: string;
   codexModel: string;
   reasoningEffort: CodexReasoningEffort;
@@ -33,7 +37,9 @@ export const DEFAULT_SETTINGS: KoreanDartCodexSettings = {
   persistSession: true,
   codexAppServerTimeoutSeconds: 30,
   codexSettingsSource: "codexian",
+  researchMode: "dart",
   koreanDartMcpSource: "managed",
+  koreaStockMcpSource: "managed",
   codexCommand: "codex",
   codexModel: "gpt-5.5",
   reasoningEffort: "medium",
@@ -117,7 +123,7 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.koreanDartMcpSource = value === "codex-config" ? "codex-config" : "managed";
             this.plugin.invalidateKoreanDartMcpStatus();
-            this.plugin.resetDartSession();
+            this.plugin.restartDartRuntime();
             await this.plugin.saveSettings();
             this.display();
           }),
@@ -133,12 +139,48 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.setDartApiKey(value);
             this.plugin.invalidateKoreanDartMcpStatus();
-            this.plugin.resetDartSession();
+            this.plugin.restartDartRuntime();
           });
         text.inputEl.type = "password";
         text.inputEl.autocomplete = "off";
         text.inputEl.spellcheck = false;
       });
+
+    new Setting(containerEl)
+      .setName("KRX API key")
+      .setDesc("Stored in Obsidian SecretStorage, not data.json, and injected only into the local korea-stock MCP runtime. The KRX tab uses it for daily stock base and trade data.")
+      .addText((text) => {
+        text
+          .setPlaceholder("KRX API key")
+          .setValue(this.plugin.getKrxApiKey())
+          .onChange((value) => {
+            this.plugin.setKrxApiKey(value);
+            this.plugin.invalidateKoreaStockMcpStatus();
+            this.plugin.restartDartRuntime();
+          });
+        text.inputEl.type = "password";
+        text.inputEl.autocomplete = "off";
+        text.inputEl.spellcheck = false;
+      });
+
+    new Setting(containerEl)
+      .setName("Korea Stock MCP")
+      .setDesc("Managed mode injects korea-stock-mcp@1.4.1 for KRX daily base and trade data. Existing Korean DART MCP remains the only disclosure source.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            managed: "Managed automatically (recommended)",
+            "codex-config": "Use existing Codex MCP config",
+          })
+          .setValue(this.plugin.settings.koreaStockMcpSource)
+          .onChange(async (value) => {
+            this.plugin.settings.koreaStockMcpSource = value === "codex-config" ? "codex-config" : "managed";
+            this.plugin.invalidateKoreaStockMcpStatus();
+            this.plugin.restartDartRuntime();
+            await this.plugin.saveSettings();
+            this.display();
+          }),
+      );
 
     new Setting(containerEl)
       .setName("Runtime mode")
@@ -251,7 +293,7 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("Environment variables")
-        .setDesc("One KEY=VALUE per line for advanced runtime overrides. Vault .env is loaded first; explicit values here override it. Use the masked OpenDART field above for DART_API_KEY.")
+        .setDesc("One KEY=VALUE per line for advanced runtime overrides. Vault .env is loaded first; explicit values here override it. Use the masked OpenDART and KRX fields above for API keys.")
         .addTextArea((text) => {
           text
             .setPlaceholder("CODEX_HOME=~/.codex\nPATH=/usr/local/bin:/usr/bin")
@@ -268,7 +310,7 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Codex timeout")
-      .setDesc("Maximum seconds to wait for one DART disclosure research request.")
+      .setDesc("Maximum seconds to wait for one DART or KRX research request.")
       .addSlider((slider) =>
         slider
           .setLimits(120, 1200, 60)
@@ -296,9 +338,7 @@ export class KoreanDartCodexSettingTab extends PluginSettingTab {
 
     containerEl.createDiv({
       cls: "korean-dart-codex-settings-hint",
-      text: this.plugin.settings.koreanDartMcpSource === "managed"
-        ? "Managed MCP uses korean-dart-mcp@0.10.1 without changing global Codex configuration. Node.js 20.19+ and an OpenDART API key are required."
-        : "Codex config mode requires an enabled MCP named korean-dart and env_vars=[\"DART_API_KEY\"] to use the masked key above. Check `codex mcp get korean-dart --json` if queries fail.",
+      text: "Managed mode runs korean-dart-mcp@0.10.1 for disclosures and korea-stock-mcp@1.4.1 for KRX daily base/trade data without changing global Codex configuration. Node.js 20.19+ is recommended.",
     });
   }
 }
