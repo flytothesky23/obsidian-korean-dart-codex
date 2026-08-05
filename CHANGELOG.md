@@ -35,6 +35,10 @@ All notable changes to Korean DART Codex are documented here.
   then starts the MCP with credentials confined to its runtime environment.
 - Documented that the audited KRX tools compare known stock codes but do not
   independently discover a market-cap top-ten universe.
+- Clarified that KRX key issuance and per-market API product approval are
+  separate setup steps. After the required KOSPI base/trade approvals were
+  activated, direct official API calls, both allowed MCP tools, the green
+  status probe, and an Obsidian dated-market-data question were verified live.
 
 ## 0.1.1 - 2026-08-04
 

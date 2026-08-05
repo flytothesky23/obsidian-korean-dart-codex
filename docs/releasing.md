@@ -38,7 +38,9 @@ in a release.
 1. Add `https://github.com/flytothesky23/obsidian-korean-dart-codex` in BRAT.
 2. Confirm BRAT downloads all four release assets.
 3. Enable `Korean DART Codex`.
-4. Open the panel and verify the DART/KRX tabs and each MCP status badge.
-5. Run one source-backed DART question and one dated KRX market-data question.
-6. Save a KRX result and verify `research_mode`, `sources`,
+4. Confirm the target market's KRX base/trade API products are approved.
+5. Open the panel and verify the DART/KRX tabs and each MCP status badge. Treat
+   KRX as ready only when its official API live probe turns the badge green.
+6. Run one source-backed DART question and one dated KRX market-data question.
+7. Save a KRX result and verify `research_mode`, `sources`,
    `trading_dates`, and `tools_used` frontmatter.
